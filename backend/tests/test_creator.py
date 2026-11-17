@@ -1,0 +1,152 @@
+import pytest
+
+
+def body(**overrides):
+    return dict(
+        name="test_mukabenov_new",
+        country="AU",
+        offer_id=1,
+        domain_id=1,
+        group_id=2,
+        traffic_source_id=3,
+        operation_id="test-operation-1234",
+        **overrides,
+    )
+
+
+def test_creator_sets_metadata_and_two_ordered_streams_and_confirms_active(setup):
+    c, remote, *_ = setup
+    response = c.post("/api/campaigns", json=body())
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "confirmed"
+    campaign = remote.get_campaign(result["campaign_id"])
+    assert (campaign["domain_id"], str(campaign["group_id"]), campaign["traffic_source_id"]) == (
+        1,
+        "2",
+        3,
+    )
+    assert campaign["type"] == "position"
+    assert campaign["state"] == "active"
+    streams = remote.list_streams(campaign["id"])
+    assert len(streams) == 2
+    assert streams[0]["position"] == 1
+    assert streams[0]["filters"] == [dict(name="country", mode="accept", payload=["AU"])]
+    assert streams[0]["action_options"]["url"] == "https://www.google.com/"
+    assert streams[1]["offers"] == [dict(offer_id=1, share=100, state="active")]
+
+
+def test_same_creation_operation_is_idempotent_and_mismatched_input_is_rejected(setup):
+    c, remote, *_ = setup
+    first = c.post("/api/campaigns", json=body()).json()
+    second = c.post("/api/campaigns", json=body()).json()
+    assert first["campaign_id"] == second["campaign_id"]
+    assert len(remote.campaigns) == 2
+    changed = body()
+    changed["country"] = "CA"
+    assert c.post("/api/campaigns", json=changed).status_code == 409
+
+
+def test_lost_creation_response_reconciles_by_alias_without_duplicate_campaign(setup):
+    c, remote, *_ = setup
+    remote.campaign_timeout_once = True
+    result = c.post("/api/campaigns", json=body())
+    assert result.status_code == 202
+    assert result.json()["status"] == "uncertain"
+    assert remote.get_campaign(8)["state"] == "disabled"
+    recovered = c.post("/api/campaigns", json=body())
+    assert recovered.status_code == 200
+    assert "message" not in recovered.json()
+    assert len(remote.campaigns) == 2
+    assert len(remote.list_streams(8)) == 2
+
+
+def test_partial_creation_stays_disabled_and_retry_does_not_duplicate_first_stream(setup):
+    c, remote, *_ = setup
+    remote.fail_second_stream = True
+    assert c.post("/api/campaigns", json=body()).status_code == 202
+    assert remote.get_campaign(8)["state"] == "disabled"
+    assert len(remote.list_streams(8)) == 1
+    remote.fail_second_stream = False
+    assert c.post("/api/campaigns", json=body()).status_code == 200
+    assert len(remote.list_streams(8)) == 2
+
+
+def test_creator_rejects_non_test_names_and_unknown_metadata_before_any_remote_write(setup):
+    c, remote, *_ = setup
+    for field, value in [("name", "production"), ("domain_id", 999), ("country", "XX")]:
+        invalid = body()
+        invalid[field] = value
+        assert c.post("/api/campaigns", json=invalid).status_code == 422
+    assert len(remote.campaigns) == 1
+
+
+def test_resume_retains_operation_if_offer_becomes_unavailable(setup):
+    c, remote, *_ = setup
+    remote.campaign_timeout_once = True
+    assert c.post("/api/campaigns", json=body()).status_code == 202
+    remote.offers[1]["state"] = "deleted"
+    retry = c.post("/api/campaigns", json=body())
+    assert retry.status_code == 202
+    assert retry.json()["operation_id"] == body()["operation_id"]
+    assert retry.json()["status"] == "uncertain"
+    assert len(remote.campaigns) == 2
+    remote.offers[1]["state"] = "active"
+    assert c.post("/api/campaigns", json=body()).status_code == 200
+    assert len(remote.campaigns) == 2
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "disabled",
+        "type",
+        "position",
+        "extra_filter",
+        "fallback_landing",
+        "fallback_disabled",
+        "fallback_type",
+        "fallback_schema",
+    ],
+)
+def test_resume_never_activates_modified_routing(setup, change):
+    c, remote, *_ = setup
+    remote.fail_second_stream = True
+    assert c.post("/api/campaigns", json=body()).status_code == 202
+    remote.fail_second_stream = False
+    country = remote.streams[12]
+    if change.startswith("fallback"):
+        remote.create_stream(
+            dict(
+                campaign_id=8,
+                name="Offers",
+                type="default",
+                position=2,
+                schema="landings",
+                action_type="http",
+                state="active",
+                filters=[],
+                landings=[],
+                offers=[dict(offer_id=1, share=100, state="active")],
+            )
+        )
+        fallback = remote.streams[13]
+        if change == "fallback_landing":
+            fallback["landings"] = [dict(landing_id=5, share=100, state="active")]
+        elif change == "fallback_disabled":
+            fallback["state"] = "disabled"
+        elif change == "fallback_type":
+            fallback["type"] = "regular"
+        else:
+            fallback["schema"] = "redirect"
+    elif change == "extra_filter":
+        country["filters"].append(dict(name="device_type", mode="accept", payload=["mobile"]))
+    else:
+        field, value = {
+            "disabled": ("state", "disabled"),
+            "type": ("type", "default"),
+            "position": ("position", 3),
+        }[change]
+        country[field] = value
+    assert c.post("/api/campaigns", json=body()).status_code == 202
+    assert remote.get_campaign(8)["state"] == "disabled"

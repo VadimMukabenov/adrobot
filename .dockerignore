@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.db*
+**/*.tsbuildinfo
+frontend/dist
+artifacts
+docs/research
+docs/superpowers
+docs/progress.md

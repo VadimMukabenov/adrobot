@@ -1,0 +1,23 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.db
+*.db-*
+*.sqlite*
+node_modules/
+frontend/dist/
+test-results/
+.superpowers/
+artifacts/
+*.egg-info/
+*.tsbuildinfo
+
+# Private employer research and local execution notes
+/docs/research/
+/docs/superpowers/
+/docs/progress.md

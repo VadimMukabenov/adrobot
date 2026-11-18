@@ -1,6 +1,6 @@
 # Verification
 
-Checked on 17 November 2026. This document separates test results from assumptions.
+Checked on 17 November 2026 and rechecked on 18 November 2026. This document separates test results from assumptions. The first table describes the original 17 November run; the recheck below records current access limits.
 
 | Area | Evidence |
 |---|---|
@@ -36,3 +36,17 @@ The production React bundle was tested in the in-app browser against the authori
 Desktop (1487×1058) and mobile (390×844) were inspected. At mobile width the editor document remained 390px wide; its 690px offer table scrolled inside a 330px container. The creation form also fit the viewport. The temporary viewport override was reset afterwards. Live screenshots are kept locally and excluded from publication.
 
 The desktop result was visually compared with the generated concept at matching dimensions. The sidebar, metadata, stream cards, controls, light palette and table hierarchy are retained. Intentional differences include real variable-length names with ellipsis, actual row counts, a clean published state rather than the concept's draft, and functional error/reconciliation feedback. The concept is a design reference, not evidence of a running application.
+
+## Recheck: 18 November 2026
+
+- Backend: 55 tests passed; Ruff passed. Frontend: 8 tests passed, TypeScript and Vite production build passed.
+- Empty SQLite database: Alembic upgrade, current revision and schema drift check passed. Clean Docker container: migrations, health, compiled React and non-root execution passed.
+- Real Keitaro: a new `test_mukabenov_` campaign was created through React and independently read back. Domain/group/source, DE accept filter with Google URL in `action_options`, and the default offer at 100% were confirmed. Pin/Push, local Remove, rejected empty Push, draft persistence, Restore and Cancel were exercised. No JavaScript runtime errors were recorded.
+- **Current access limitation:** the supplied key now lists only offer 18813; previously used additional offers return 403. The current three-offer scenario was therefore checked against a stateful fake Keitaro boundary, through the real React/FastAPI/SQLAlchemy stack. This is not a new live three-offer verification.
+- Isolated browser flow: Add/Cancel, 34/33/33 allocation, pinned 25% with remaining 38%/37%, reload persistence, dirty Refresh refusal, Push/read-back, Remove/Push and Restore/Push passed. Expected 404 cache-miss and 409 dirty-refresh responses were distinguished from runtime errors.
+- Playwright was used because the Browser plugin was not available. Desktop 1440×1000 and mobile 390×844 were inspected; the mobile document fits the viewport while the offer table scrolls internally.
+- README configuration and Docker startup blocks were extracted and executed on a clean source copy with an empty volume. Local readiness, compiled React, repeat startup and all Docker migration commands passed. Only the host port was isolated (8767) to preserve the running user instance. Synthetic credentials tested dotenv quoting, hidden input setup, private file permissions and preservation of an existing `.env`; readiness alone does not prove a key has remote access.
+- Manual README startup was also run on a clean source copy: locked dependency install, frontend production build, empty-database migration and Uvicorn startup passed on isolated port 8768. An initially cold uv cache downloaded slowly; the completed run used the ordinary warm uv cache. The user instance on 8765 was preserved.
+- Fresh dependency audit: production dependencies have zero reported vulnerabilities; six high-severity development-tool entries remain under the advisory above. No forced dependency downgrade was applied.
+
+Temporary QA scripts, synthetic fixtures, databases and screenshots are excluded from the source deliverable. No paid traffic, real lead data or advertising conversions were used in this recheck.

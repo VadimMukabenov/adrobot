@@ -1,56 +1,74 @@
 # Adrobot
 
-Create Keitaro campaigns and edit offer weights with persistent drafts,
-Cancel and explicit publishing. FastAPI · SQLAlchemy · React.
+Создание кампаний Keitaro и редактор распределения трафика между офферами.
+FastAPI · SQLAlchemy · Alembic · React · TypeScript.
 
-## Start
+## Запуск с чистого клона
 
-Requires **Git and Docker with Compose v2.24+**. From any directory:
-
-```bash
-git clone https://github.com/VadimMukabenov/adrobot ~/adrobot && ~/adrobot/start
-```
-
-Open **http://127.0.0.1:8765/** and connect using the real Keitaro Admin API key
-([setup below](#connect-to-real-keitaro)). Existing connection and drafts are kept.
-
-To test the full editor with four offers, select the **HTTP Keitaro emulator**:
+Нужны **Git и работающий Docker с Compose v2.24+**. Python и Node.js на компьютере
+проверяющего не требуются. Первый запуск скачивает зависимости или готовый образ.
 
 ```bash
-~/adrobot/start --emulator
-```
-
-Open **http://127.0.0.1:8767/**. No key or configuration is needed. The same
-application talks over HTTP to a separate local tracker. Both databases persist
-in their own volumes; real Keitaro and its connection stay separate.
-**Open as visitor** lets you select a simulated country and open Google or a
-sample offer using the published weights. VPN/real GeoIP is not simulated.
-
-Add `--image` to either command to pull the published image without a local build,
-for example `~/adrobot/start --emulator --image`. Repeat a command to resume that
-mode; both can run together. Update an existing clone with `git -C ~/adrobot pull --ff-only`.
-
-## Use the editor
-
-1. Choose a campaign, or **New campaign**: selected country → Google, other visitors → an offer (destination page).
-2. **Open as visitor** previews the campaign; **Copy link** lets you test real Keitaro on your phone with VPN. In the emulator, select a country in the local preview.
-3. Add offers and set traffic percentages. **Pin** keeps a percentage fixed; the rest is shared equally.
-4. **Publish to Keitaro** applies the draft. **Discard draft** undoes local edits; **Remove** never deletes the global offer.
-
-**Acceptance:** creation and country routing were checked with the supplied live
-account, which exposed one offer during verification. The four-offer editor cycle
-is checked against the HTTP emulator; live multi-offer validation needs additional
-accessible offers. [Scenarios and how to repeat them](docs/acceptance.md).
-
-## Connect to real Keitaro
-
-```bash
+git clone https://github.com/VadimMukabenov/adrobot ~/adrobot
 ~/adrobot/start
 ```
 
-Open **http://127.0.0.1:8765/**, then connect:
+Открыть **http://127.0.0.1:8765/**. Это режим **настоящего Keitaro**.
+При первом запуске подключить Admin API key по инструкции ниже.
 
-1. Sign in to **[test Keitaro](https://tlgk.host/admin/)** using the account from the assignment:
+Docker собирает интерфейс и backend. При каждом запуске приложения автоматически
+выполняется **`alembic upgrade head`**: база создаётся и мигрируется без ручных команд.
+Повторный запуск сохраняет подключение и черновики в Docker volume.
+
+## Два режима проверки
+
+| Режим | Команда после клонирования | Адрес |
+|---|---|---|
+| Настоящий Keitaro | `~/adrobot/start` | http://127.0.0.1:8765/ |
+| HTTP-эмулятор с четырьмя офферами, готовый образ | `~/adrobot/start --emulator --image` | http://127.0.0.1:8767/ |
+
+Для сборки эмулятора из исходников убрать `--image`. Готовый образ опубликован
+для **linux/amd64**. Оба режима могут работать одновременно. У эмулятора отдельные
+постоянные хранилища приложения и трекера; реальное подключение он не использует.
+Режим явно обозначен в интерфейсе, автоматического переключения при ошибках нет.
+
+**Почему есть эмулятор:** при проверке предоставленный аккаунт Keitaro возвращал
+один доступный оффер. Создание кампании и маршруты «выбранная страна → Google,
+другая страна → оффер» проверены на настоящем Keitaro, включая переходы с телефона.
+Перераспределение между несколькими реальными офферами с этим аккаунтом не
+проверено. Для воспроизводимой проверки весов добавлен отдельный HTTP-эмулятор:
+обычное приложение обращается к нему через тот же клиент Keitaro API.
+Это проверка поддерживаемого API-контракта, а не доказательство поведения любой
+версии или конфигурации настоящего Keitaro.
+
+## Как проверить редактор на четырёх офферах
+
+1. Запустить `~/adrobot/start --emulator --image`, открыть **http://127.0.0.1:8767/**
+   и выбрать кампанию **test_mukabenov_demo**. В свежем хранилище в ней три оффера.
+2. Найти **Demo offer 4** по названию, выбрать его и нажать **Add offer**.
+   Получится **25/25/25/25**. Изменения пока только в локальном черновике.
+3. Нажать **Discard draft**: добавление отменится. Снова добавить четвёртый оффер
+   и нажать **Publish to Keitaro**. Дождаться подтверждения и обновить страницу:
+   четыре оффера должны остаться.
+4. Закрепить первый оффер (**Pin**) на **25%**, удалить четвёртый (**Remove**).
+   У активных офферов получится **25/38/37**, удалённый останется в архиве с 0%.
+   Опубликовать, затем **Restore** четвёртого и снова опубликовать: **25/25/25/25**.
+   Глобальный каталог офферов при этом не удаляется.
+5. Изменить вес и обновить страницу: неопубликованный черновик сохраняется.
+   **Discard draft** возвращает последнюю опубликованную конфигурацию.
+6. Нажать **Open as visitor**. В эмуляторе выбрать **Australia (AU)** → Google;
+   **Netherlands (NL)** → одна из тестовых страниц офферов. В новой кампании
+   использовать страну, выбранную при её создании. Эмулятор использует этот явный
+   выбор, **не IP/VPN**; его ссылки доступны на этом компьютере.
+
+Удалённый оффер исключается из распределения; закреплённый вес сохраняется,
+остаток делится между незакреплёнными. Сумма активных весов должна быть 100%.
+Несколько переходов не доказывают точное статистическое соотношение трафика.
+[Полный список сценариев и границы проверки](docs/acceptance.md).
+
+## Подключение настоящего Keitaro
+
+1. Открыть **[тестовый Keitaro](https://tlgk.host/admin/)** с доступами из задания:
 
    | Login | Password |
    |---|---|
@@ -59,19 +77,37 @@ Open **http://127.0.0.1:8765/**, then connect:
    > **Security note:** I understand that real project credentials must never be published or committed.
    > This shared test account is included deliberately as an assignment-only simplification for quick evaluation and onboarding.
 
-2. In Keitaro: account icon → **Account → API keys**. Copy the existing key.
-   [Where to find it](https://docs.keitaro.io/en/team-management/admin-api-keys.html).
-3. Back in Adrobot, keep the prefilled **Keitaro URL**, paste the key into
-   **Admin API key** and click **Connect**.
+2. В Keitaro: значок аккаунта → **Account → API keys**. Скопировать существующий
+   **Admin API key** — это отдельный ключ, не пароль аккаунта.
+   [Где его найти](https://docs.keitaro.io/en/team-management/admin-api-keys.html).
+3. В Adrobot на **http://127.0.0.1:8765/** оставить предзаполненный **Keitaro URL**,
+   вставить ключ в **Admin API key** и нажать **Connect**. Ключ остаётся на backend,
+   не попадает в браузерное хранилище или репозиторий.
+4. **New campaign**: ввести суффикс фиксированного `test_mukabenov_`, выбрать
+   страну, доступный оффер по названию, домен, группу и источник. **Create campaign**
+   создаёт два потока в Keitaro; создание сразу изменяет настоящий трекер.
+5. В созданной кампании взять **Copy link** / **Open as visitor**. Для проверки
+   с телефона включить VPN выбранной страны: должен открыться Google. С другой
+   страной — оффер. Это реальный маршрут Keitaro; доступность домена, оффера и
+   определение страны зависят от его настройки. Повторные визиты видны в статистике.
 
-Docker handles the build, database and startup. Connection settings and drafts
-survive restarts. Start again with `~/adrobot/start`.
+Редактирование офферов сначала сохраняет локальный черновик. **Publish to Keitaro**
+применяет его и проверяет результат обратным чтением; **Discard draft** отменяет
+неопубликованные изменения. **Refresh from Keitaro** загружает актуальное состояние.
+Поток перенаправления по стране при публикации офферов не изменяется.
 
-To repeat first launch without `.env`, reset the saved connection and local drafts:
+## Перезапуск и проверка сборки
 
-```bash
-docker compose -f ~/adrobot/compose.yaml down --volumes && ~/adrobot/start
-```
+Повторить команду выбранного режима. Для обновления исходников:
+`git -C ~/adrobot pull --ff-only`, затем повторить запуск.
+Удаление каталога клона **не удаляет Docker volumes**; инструкции по чистому
+повторному запуску и сбросу только выбранного режима — в [Usage](docs/usage.md).
 
-[CI](https://github.com/VadimMukabenov/adrobot/actions/workflows/ci.yml) · [Usage](docs/usage.md) · [Development and tests](docs/development.md) ·
-[Kubernetes](docs/kubernetes.md) · [Verification](docs/verification.md) · [AI usage](docs/ai-usage.md)
+[CI](https://github.com/VadimMukabenov/adrobot/actions/workflows/ci.yml) проверяет
+backend, миграции, frontend, браузерные сценарии и Docker-запуск с сохранением
+данных после пересоздания контейнеров. Образ публикуется только после успешных
+проверок. Команды тестов, запуск без Docker и ручные миграции — в
+[Development](docs/development.md).
+
+[Использование ИИ](docs/ai-usage.md) · [Проверки и ограничения](docs/acceptance.md) ·
+[Дополнительная документация](docs/usage.md) · [Kubernetes](docs/kubernetes.md)

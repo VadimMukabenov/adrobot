@@ -1,0 +1,17 @@
+# APP_MODE must be chosen explicitly. Each mode gets its own project and data volume.
+name: adrobot-release-${APP_MODE:?Set APP_MODE to live or demo}
+services:
+  app:
+    image: ${ADROBOT_IMAGE:-ghcr.io/vadimmukabenov/adrobot:latest}
+    ports:
+      - "127.0.0.1:${ADROBOT_PORT:-8765}:8765"
+    environment:
+      APP_MODE: ${APP_MODE:?Set APP_MODE to live or demo}
+      DATABASE_URL: sqlite:////data/adrobot.db
+      DEMO_DATABASE_URL: sqlite:////data/demo-resources.db
+    volumes:
+      - adrobot-data:/data
+    init: true
+    restart: unless-stopped
+volumes:
+  adrobot-data:

@@ -1,0 +1,244 @@
+name: CI and image delivery
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend and migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.11.29"
+          python-version: "3.12"
+      - name: Install locked backend dependencies
+        run: uv sync --frozen
+      - name: Test backend
+        run: uv run --frozen pytest
+      - name: Lint backend
+        run: uv run --frozen ruff check adrobot tests
+      - name: Migrate an empty database and verify schema
+        env:
+          DATABASE_URL: sqlite:///${{ runner.temp }}/migration-check.db
+        run: |
+          uv run --frozen alembic upgrade head
+          uv run --frozen alembic check
+          uv run --frozen alembic upgrade head
+
+  frontend:
+    name: Frontend tests, types and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+
+  e2e:
+    name: Real HTTP browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.11.29"
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked backend dependencies
+        working-directory: backend
+        run: uv sync --frozen
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm run build
+      - working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Test browser against isolated application and tracker fixture
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Keep browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: playwright-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  docker-smoke:
+    name: Isolated Docker demo smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_MODE: demo
+      ADROBOT_IMAGE: adrobot:ci
+      ADROBOT_PORT: "0"
+      COMPOSE_PROJECT_NAME: adrobot-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      SMOKE_SNAPSHOT: /tmp/adrobot-ci-${{ github.run_id }}-${{ github.run_attempt }}.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the release image for linux/amd64
+        run: |
+          docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.source=https://github.com/VadimMukabenov/adrobot" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$ADROBOT_IMAGE" .
+      - name: Start with empty, isolated demo storage
+        run: |
+          docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" \
+            up -d --no-build --pull never --wait --wait-timeout 90
+      - name: Verify demo HTTP, static frontend and persistent campaign draft
+        run: |
+          SMOKE_ADDRESS=$(docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" port app 8765)
+          export SMOKE_ADDRESS
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          base = f"http://{os.environ['SMOKE_ADDRESS']}"
+          def get(path):
+              with urllib.request.urlopen(base + path, timeout=10) as response:
+                  return json.load(response)
+
+          health = get('/api/health')
+          assert health['status'] == 'ok' and health['mode'] == 'demo'
+          connection = get('/api/connection')
+          assert connection['mode'] == 'demo' and connection['configured'] is True
+          campaigns = get('/api/campaigns')
+          assert campaigns, 'Demo must seed a campaign'
+          assert len(get('/api/offers')) >= 4, 'Demo must seed at least four offers'
+          with urllib.request.urlopen(base + '/', timeout=10) as response:
+              assert b'<html' in response.read().lower()
+          campaign_id = campaigns[0]['id']
+          request = urllib.request.Request(base + f'/api/campaigns/{campaign_id}/fetch', method='POST')
+          with urllib.request.urlopen(request, timeout=10) as response:
+              assert response.status == 200
+          snapshot = get(f'/api/campaigns/{campaign_id}')
+          assert snapshot['streams'], 'Demo campaign must contain streams'
+          Path(os.environ['SMOKE_SNAPSHOT']).write_text(json.dumps(snapshot))
+          PY
+          docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" \
+            exec -T app .venv/bin/python -c \
+            "import os; from pathlib import Path; assert os.getuid() == 10001; assert Path('/data/adrobot.db').is_file(); assert Path('/data/demo-resources.db').is_file()"
+      - name: Recreate container and verify persistence and repeated migrations
+        run: |
+          docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" \
+            up -d --no-build --pull never --force-recreate --wait --wait-timeout 90
+          SMOKE_ADDRESS=$(docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" port app 8765)
+          export SMOKE_ADDRESS
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          expected = json.loads(Path(os.environ['SMOKE_SNAPSHOT']).read_text())
+          base = f"http://{os.environ['SMOKE_ADDRESS']}"
+          with urllib.request.urlopen(base + f"/api/campaigns/{expected['id']}", timeout=10) as response:
+              assert json.load(response) == expected, 'Draft must survive container recreation'
+          PY
+      - name: Save the smoke-tested image for publication
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker image save --output "$RUNNER_TEMP/adrobot-image.tar" "$ADROBOT_IMAGE"
+      - name: Keep the smoke-tested image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: adrobot-image-${{ github.sha }}
+          path: ${{ runner.temp }}/adrobot-image.tar
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+      - name: Show isolated container logs on failure
+        if: failure()
+        run: docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" logs --no-color
+      - name: Clean only this smoke project's containers and volume
+        if: always()
+        run: docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" down --volumes --remove-orphans
+
+  publish:
+    name: Publish tested image to GHCR
+    needs: [backend, frontend, e2e, docker-smoke]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'VadimMukabenov/adrobot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download the smoke-tested image
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: adrobot-image-${{ github.sha }}
+          path: ${{ runner.temp }}
+      - name: Load the smoke-tested image
+        run: docker image load --input "$RUNNER_TEMP/adrobot-image.tar"
+      - name: Log in with this workflow's package identity
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish immutable commit tag and latest
+        env:
+          IMAGE: ghcr.io/vadimmukabenov/adrobot
+        run: |
+          docker tag adrobot:ci "$IMAGE:sha-$GITHUB_SHA"
+          docker tag adrobot:ci "$IMAGE:latest"
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          docker push "$IMAGE:latest"
+          {
+            echo "Published the smoke-tested linux/amd64 image:"
+            echo "\`$IMAGE:sha-$GITHUB_SHA\`"
+            echo "\`$IMAGE:latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify reviewers can pull without registry credentials
+        run: |
+          mkdir -p "$RUNNER_TEMP/anonymous-docker"
+          if ! docker --config "$RUNNER_TEMP/anonymous-docker" pull "ghcr.io/vadimmukabenov/adrobot:sha-$GITHUB_SHA"; then
+            echo "::error::Anonymous image pull failed. Check package visibility at https://github.com/users/VadimMukabenov/packages/container/adrobot/settings and make the package public, then rerun this job."
+            exit 1
+          fi
+          echo "Anonymous pull of the immutable commit image passed." >> "$GITHUB_STEP_SUMMARY"

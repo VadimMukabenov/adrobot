@@ -30,5 +30,11 @@ Open **http://127.0.0.1:8765/**, then connect:
 Docker handles the build, database and startup. Connection settings and drafts
 survive restarts. Start again with `~/adrobot/start`.
 
+To repeat first launch without `.env`, reset the saved connection and local drafts:
+
+```bash
+docker compose -f ~/adrobot/compose.yaml down --volumes && ~/adrobot/start
+```
+
 [Usage](docs/usage.md) · [Development and tests](docs/development.md) ·
 [Kubernetes](docs/kubernetes.md) · [Verification](docs/verification.md) · [AI usage](docs/ai-usage.md)

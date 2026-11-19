@@ -82,7 +82,7 @@ class DemoGateway:
                 action_type="http",
                 state="active",
                 collect_clicks=True,
-                action_options={"url": "https://www.google.com/"},
+                action_payload="https://www.google.com/",
                 filters=[dict(name="country", mode="accept", payload=["AU"])],
                 offers=[],
                 landings=[],

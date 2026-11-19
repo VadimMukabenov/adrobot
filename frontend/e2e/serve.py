@@ -66,7 +66,7 @@ class Tracker:
                 schema="redirect",
                 action_type="http",
                 state="active",
-                action_options={"url": "https://www.google.com/"},
+                action_payload="https://www.google.com/",
                 filters=[dict(name="country", mode="accept", payload=["AU"])],
                 offers=[],
             ),
@@ -131,8 +131,8 @@ class Handler(BaseHTTPRequestHandler):
                     )
                 )
         if not path.startswith("/admin_api/v1/"):
-            # Public visitor routes need no Admin API key. The isolated tracker
-            # displays its first offer so the browser can test the shared link.
+            # Public visitor routes need no Admin API key. Fixture geography
+            # chooses either the country redirect or the default offer.
             with tracker.lock:
                 campaign = next(
                     (
@@ -143,6 +143,31 @@ class Handler(BaseHTTPRequestHandler):
                     None,
                 )
                 if campaign:
+                    country = self.headers.get("X-Test-Country", "ZZ")
+                    redirect = next(
+                        (
+                            s
+                            for s in tracker.streams.values()
+                            if s["campaign_id"] == campaign["id"]
+                            and s.get("schema") == "redirect"
+                            and s.get("state") == "active"
+                            and any(
+                                f.get("name") == "country"
+                                and f.get("mode") == "accept"
+                                and country in f.get("payload", [])
+                                for f in s.get("filters", [])
+                            )
+                        ),
+                        None,
+                    )
+                    if redirect:
+                        # Match live Keitaro: URL is action_payload. A missing
+                        # URL yields an empty Location, never options.url.
+                        self.send_response(302)
+                        self.send_header("Location", redirect.get("action_payload") or "")
+                        self.send_header("Content-Length", "0")
+                        self.end_headers()
+                        return
                     stream = next(
                         (
                             s

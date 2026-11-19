@@ -153,7 +153,7 @@ def test_creator_sets_metadata_and_two_ordered_streams_and_confirms_active(setup
     assert len(streams) == 2
     assert streams[0]["position"] == 1
     assert streams[0]["filters"] == [dict(name="country", mode="accept", payload=["AU"])]
-    assert streams[0]["action_options"]["url"] == "https://www.google.com/"
+    assert streams[0]["action_payload"] == "https://www.google.com/"
     assert streams[1]["offers"] == [dict(offer_id=1, share=100, state="active")]
 
 
@@ -370,4 +370,44 @@ def test_clean_creation_reads_back_campaign_and_streams_concurrently(setup):
         remote.campaigns[campaign_id].update(data) or remote.campaigns[campaign_id].copy()
     )
     response = client.post("/api/campaigns", json=body())
+    assert response.json()["status"] == "confirmed"
+
+
+@pytest.mark.parametrize("payload", [None, "", "https://wrong.invalid/"])
+def test_creator_does_not_activate_a_redirect_with_only_matching_options_url(setup, payload):
+    c, remote, *_ = setup
+    create_stream = remote.create_stream
+
+    def broken_stream(definition):
+        if definition["position"] == 1:
+            definition = {
+                **definition,
+                "action_payload": payload,
+                "action_options": {"url": "https://www.google.com/"},
+            }
+        return create_stream(definition)
+
+    remote.create_stream = broken_stream
+    response = c.post("/api/campaigns", json=body())
+    assert response.status_code == 202
+    assert response.json()["status"] == "uncertain"
+    assert remote.get_campaign(response.json()["campaign_id"])["state"] == "disabled"
+
+
+def test_creator_accepts_canonical_redirect_payload_with_null_options(setup):
+    c, remote, *_ = setup
+    create_stream = remote.create_stream
+
+    def canonical_stream(definition):
+        if definition["position"] == 1:
+            definition = {
+                **definition,
+                "action_payload": "https://www.google.com/",
+                "action_options": None,
+            }
+        return create_stream(definition)
+
+    remote.create_stream = canonical_stream
+    response = c.post("/api/campaigns", json=body())
+    assert response.status_code == 200
     assert response.json()["status"] == "confirmed"

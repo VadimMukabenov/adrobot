@@ -15,7 +15,7 @@ type RemoteStream = {
   position: number;
   offers: RemoteOffer[];
   filters?: unknown[];
-  action_options?: { url: string };
+  action_payload?: string;
 };
 type RemoteState = {
   campaigns: {
@@ -171,7 +171,7 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
   expect(streams).toHaveLength(2);
   expect(streams[0]).toMatchObject({
     filters: [{ name: "country", mode: "accept", payload: ["AU"] }],
-    action_options: { url: "https://www.google.com/" },
+    action_payload: "https://www.google.com/",
     offers: [],
   });
   expect(streams[1].offers).toEqual([
@@ -508,4 +508,41 @@ test("an accepted write with unavailable read-back keeps the draft locked until 
   expect(writes(await remote(request), "PUT", "streams/1002")).toHaveLength(
     before + 1,
   );
+});
+
+test("matching-country visitors receive the Google redirect and other visitors open the offer", async ({
+  page,
+  request,
+}) => {
+  await open(page, request);
+  const name = "test_mukabenov_e2e_country_redirect";
+  await newCampaign(page, request, name);
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  const campaign = (await remote(request)).campaigns.find(
+    (item) => item.name === name,
+  )!;
+  const url = `${trackerURL}/${campaign.alias}`;
+  const matching = await request.get(url, {
+    headers: { "X-Test-Country": "AU" },
+    maxRedirects: 0,
+  });
+  expect(matching.status()).toBe(302);
+  expect(matching.headers()["location"]).toBe("https://www.google.com/");
+  const other = await request.get(url, {
+    headers: { "X-Test-Country": "NL" },
+    maxRedirects: 0,
+  });
+  expect(other.status()).toBe(200);
+  expect(await other.text()).toContain("Offer 101");
+  // Keep the Google boundary offline: assert the real tracker response above.
+  // Follow the other branch through the actual visitor link and HTTP server.
+  await page.context().setExtraHTTPHeaders({ "X-Test-Country": "NL" });
+  const popupPromise = page.waitForEvent("popup");
+  await page
+    .getByRole("link", { name: "Open as visitor", exact: true })
+    .click();
+  const visitor = await popupPromise;
+  await expect(visitor).toHaveURL(url);
+  await expect(visitor.getByRole("heading", { name: "Offer 101" })).toBeVisible();
+  await visitor.close();
 });

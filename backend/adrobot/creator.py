@@ -111,7 +111,7 @@ class Creator:
                     schema="redirect",
                     action_type="http",
                     state="active",
-                    action_options={"url": "https://www.google.com/"},
+                    action_payload="https://www.google.com/",
                     collect_clicks=True,
                     filters=[dict(name="country", mode="accept", payload=[request.country])],
                 ),
@@ -219,7 +219,7 @@ class Creator:
                 and payload == [request.country]
             ):
                 valid_filter = True
-        url = country.get("action_options", {}).get("url") or country.get("action_payload")
+        url = country.get("action_payload")
         if (
             not valid_filter
             or len(filters) != 1

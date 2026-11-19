@@ -7,11 +7,13 @@ from adrobot.errors import AppError
 from adrobot.keitaro import KeitaroGateway
 
 
-def test_consecutive_tracker_requests_reuse_the_same_tcp_connection():
+def test_write_succeeds_when_tracker_stalls_on_a_reused_connection():
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    from threading import Thread
+    from threading import Event, Thread
 
     connections = []
+    release = Event()
+    writes = []
 
     class Server(ThreadingHTTPServer):
         daemon_threads = True
@@ -24,8 +26,28 @@ def test_consecutive_tracker_requests_reuse_the_same_tcp_connection():
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
+        def setup(self):
+            super().setup()
+            self.request_count = 0
+
         def do_GET(self):
+            self.request_count += 1
             data = b"[]"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_PUT(self):
+            self.request_count += 1
+            writes.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            if self.request_count > 1:
+                # A write may be accepted even when the reused connection loses its reply.
+                release.wait(timeout=2)
+                self.close_connection = True
+                return
+            data = b'{"id":11,"state":"active"}'
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
@@ -39,11 +61,14 @@ def test_consecutive_tracker_requests_reuse_the_same_tcp_connection():
     worker = Thread(target=server.serve_forever, daemon=True)
     worker.start()
     gateway = KeitaroGateway(f"http://127.0.0.1:{server.server_port}", "synthetic")
+    gateway._client.timeout = httpx.Timeout(0.1, connect=1)
     try:
         gateway.list_offers()
-        gateway.list_offers("1")
-        assert len(connections) == 1
+        assert gateway.update_campaign(11, {"state": "active"})["state"] == "active"
+        assert writes == [{"state": "active"}]
+        assert len(connections) == 2
     finally:
+        release.set()
         if hasattr(gateway, "close"):
             gateway.close()
         server.shutdown()

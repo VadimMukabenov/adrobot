@@ -20,6 +20,10 @@ class KeitaroGateway:
             base_url=self.base_url,
             headers={"Api-Key": self._api_key},
             timeout=httpx.Timeout(20, connect=10),
+            # Live HTTPX probes lost replies on reused tracker connections;
+            # fresh connections completed with the same headers and timeout.
+            # Keep client configuration shared, but do not retain idle sockets.
+            limits=httpx.Limits(max_keepalive_connections=0),
             transport=self._transport,
             follow_redirects=False,
         )

@@ -80,3 +80,13 @@ Temporary QA scripts, synthetic fixtures, databases and screenshots are excluded
   They establish local startup, not the validity of an evaluator's API key or a
   live Kubernetes installation. Earlier live Keitaro evidence remains scoped to
   the separate checks recorded above.
+
+## Unambiguous tracker setup — 19 November 2026
+
+The launcher accepts the full browser admin-page URL and keeps only its origin.
+It rejects reserved example domains before requesting a key or writing `.env`;
+the prompt points to Account → API keys and explains invisible input. Regression
+tests first reproduced rejection of a full admin URL and acceptance of a literal
+example URL, then passed after the fix. All **61 backend tests** and Ruff passed;
+`bash -n start` passed. Existing `.env` files remain preserved. Real assignment
+credentials are not part of the public examples.

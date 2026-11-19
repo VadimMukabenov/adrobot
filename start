@@ -6,13 +6,23 @@ fail() { printf '%s\n' "$1" >&2; exit 1; }
 test -f compose.yaml || fail 'The start script must stay inside the Adrobot clone.'
 command -v docker >/dev/null || fail 'Install Docker with Compose v2.20+ first.'
 docker compose version >/dev/null
-docker info >/dev/null
+docker info >/dev/null 2>&1 || fail 'Start Docker and allow this OS user to access it, then retry.'
 
 if [ ! -f .env ]; then
-  read -r -p 'Keitaro address (https://tracker.example): ' tracker
-  tracker=${tracker%/}
-  [[ "$tracker" =~ ^https?://[^/?#@[:space:]]+$ ]] || fail 'Enter only the tracker origin, without /admin.'
-  read -r -s -p 'Keitaro Admin API key (hidden): ' api_key
+  printf '%s\n' 'Open the real Keitaro link provided in the assignment. Copy its browser URL.'
+  read -r -p 'Paste your Keitaro admin URL: ' tracker
+  [[ "$tracker" =~ ^(https?://[^/?#@[:space:]]+)([/?#][^[:space:]]*)?$ ]] || fail 'Paste the full http:// or https:// URL of your real Keitaro page.'
+  tracker=${BASH_REMATCH[1]}
+  host=$(printf '%s' "${tracker#*://}" | tr '[:upper:]' '[:lower:]')
+  host=${host%%:*}
+  host=${host%.}
+  case "$host" in
+    example.com|*.example.com|example.org|*.example.org|example.net|*.example.net|example|*.example|invalid|*.invalid)
+      fail 'This is an example address, not your tracker. Use the real Keitaro link from the assignment.' ;;
+  esac
+  printf 'Tracker: %s\n' "$tracker"
+  printf '%s\n' 'In Keitaro: account icon -> Account -> API keys. Copy the existing Admin API key.'
+  read -r -s -p 'Paste that API key and press Enter (typing is invisible): ' api_key
   printf '\n'
   test -n "$api_key" || fail 'The Admin API key cannot be empty.'
   case "$tracker$api_key" in

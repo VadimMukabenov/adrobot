@@ -74,3 +74,83 @@ def test_missing_configuration_is_clear_and_makes_no_network_request():
     with pytest.raises(AppError) as exc:
         gateway.list_offers()
     assert exc.value.status == 503
+
+
+def test_transient_get_network_failure_is_retried_once():
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        if len(calls) == 1:
+            raise httpx.ConnectTimeout("temporary connection problem with fake-secret")
+        return httpx.Response(200, json=[])
+
+    gateway = KeitaroGateway(
+        "https://tracker.example", "fake-secret", transport=httpx.MockTransport(handle)
+    )
+    assert gateway.list_campaigns() == []
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "DELETE"])
+def test_remote_writes_are_never_automatically_retried(method):
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        raise httpx.ReadTimeout("response lost after write; fake-secret")
+
+    gateway = KeitaroGateway(
+        "https://tracker.example", "fake-secret", transport=httpx.MockTransport(handle)
+    )
+    with pytest.raises(AppError) as exc:
+        gateway.request(method, "campaigns", json={"name": "test_demo"})
+    assert len(calls) == 1
+    assert "remote state" in exc.value.message.lower()
+    assert "fake-secret" not in exc.value.message
+
+
+@pytest.mark.parametrize(
+    ("error", "explanation"),
+    [
+        (httpx.ConnectError, "network"),
+        (httpx.ReadTimeout, "timed out"),
+    ],
+)
+def test_persistent_get_failure_has_bounded_retries_and_clear_safe_error(
+    error, explanation, caplog
+):
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        raise error("internal transport detail with fake-secret")
+
+    gateway = KeitaroGateway(
+        "https://tracker.example", "fake-secret", transport=httpx.MockTransport(handle)
+    )
+    with pytest.raises(AppError) as exc:
+        gateway.request("GET", "campaigns", params={"limit": 1})
+    assert len(calls) == 2
+    assert explanation in exc.value.message.lower()
+    assert "remote state" not in exc.value.message.lower()
+    assert "fake-secret" not in exc.value.message
+    assert "internal transport detail" not in exc.value.message
+    assert "fake-secret" not in caplog.text
+    assert "internal transport detail" not in caplog.text
+    assert "attempt 2/2" in caplog.text
+
+
+def test_access_denied_is_not_retried():
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        return httpx.Response(403, text="fake-secret")
+
+    gateway = KeitaroGateway(
+        "https://tracker.example", "fake-secret", transport=httpx.MockTransport(handle)
+    )
+    with pytest.raises(AppError):
+        gateway.request("GET", "campaigns")
+    assert len(calls) == 1

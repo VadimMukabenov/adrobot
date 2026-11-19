@@ -1,9 +1,12 @@
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit
 
 import httpx
 
 from .errors import AppError
+
+logger = logging.getLogger(__name__)
 
 
 class KeitaroGateway:
@@ -19,6 +22,8 @@ class KeitaroGateway:
             raise AppError(
                 503, "Set KEITARO_API_KEY in the server environment before using Keitaro."
             )
+        read_only = method.upper() == "GET"
+        attempts = 2 if read_only else 1
         try:
             with httpx.Client(
                 base_url=self.base_url,
@@ -27,11 +32,32 @@ class KeitaroGateway:
                 transport=self._transport,
                 follow_redirects=False,
             ) as client:
-                response = client.request(method, path, **kwargs)
-        except httpx.HTTPError:
-            raise AppError(
-                502, "Keitaro connection failed or timed out. Check the remote state."
-            ) from None
+                for attempt in range(attempts):
+                    try:
+                        response = client.request(method, path, **kwargs)
+                        break
+                    except httpx.TransportError as error:
+                        # Never log headers, response bodies or exception text containing secrets.
+                        logger.warning(
+                            "Keitaro %s transport failure: %s (attempt %d/%d)",
+                            method.upper(),
+                            type(error).__name__,
+                            attempt + 1,
+                            attempts,
+                        )
+                        if attempt + 1 == attempts:
+                            raise
+        except httpx.HTTPError as error:
+            if not read_only:
+                message = "Keitaro connection failed or timed out. Check the remote state."
+            elif isinstance(error, httpx.TimeoutException):
+                message = "Keitaro timed out. Check the Adrobot server's network/VPN and try again."
+            else:
+                message = (
+                    "Cannot reach Keitaro from the Adrobot server. "
+                    "Check its network, DNS/VPN and the tracker URL, then try again."
+                )
+            raise AppError(502, message) from None
         if response.status_code == 404:
             raise AppError(404, "The requested Keitaro resource is unavailable.")
         if response.status_code in (401, 403):

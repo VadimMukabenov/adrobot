@@ -112,3 +112,21 @@ credentials are not part of the public examples.
   stayed 390px wide; no framework overlay or browser console errors/warnings
   were recorded. This does not revalidate the current real tracker key or all
   resource permissions. Existing environment settings still skip browser setup.
+
+## Real connection recovery: 19 November 2026
+
+A first-run setup POST returned a transport error in the user's local instance.
+At investigation time host/container DNS and HTTPS were reachable; three
+read-only authenticated requests from the container returned200 in about1.25s.
+The earlier exact network failure could not be reconstructed from the old generic
+error. Setup was then completed through the real application API using the
+existing authorized local key; the campaign list loaded32records. No remote
+campaign was created or changed by these checks.
+
+GET transport failures now receive one additional attempt; HTTP errors and all
+write methods are never automatically retried. Read errors describe server
+network/timeout checks; uncertain-write messages retain the remote-state warning.
+Logs contain only method, exception class and attempt count, without credentials,
+response bodies or exception text. Regression tests reproduced the missing retry
+before the fix. All80backend tests and Ruff passed; independent review found no
+blockers. The frontend was unchanged.

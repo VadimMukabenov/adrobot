@@ -337,3 +337,44 @@ def test_explicit_mode_overrides_dotenv_selection_without_changing_live_loading(
     else:
         assert settings.database_url == "sqlite:///./adrobot-demo.db"
         assert settings.keitaro_api_key.get_secret_value() == ""
+
+
+@pytest.mark.parametrize("database_url", ["sqlite:///same.db", "not-a-database-url"])
+def test_dotenv_only_demo_rejects_before_key_bearing_database_validation(
+    tmp_path, monkeypatch, database_url
+):
+    for name in ("APP_MODE", "DATABASE_URL", "KEITARO_API_KEY", "DEMO_DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(
+        f"APP_MODE=demo\nDATABASE_URL={database_url}\nDEMO_DATABASE_URL={database_url}\n"
+        "KEITARO_API_KEY=synthetic-review-marker\n"
+    )
+    with pytest.raises(ValueError, match="APP_MODE") as rejected:
+        Settings(_env_file=dotenv)
+    assert not isinstance(rejected.value, ValidationError)
+    assert "synthetic-review-marker" not in str(rejected.value)
+
+
+@pytest.mark.parametrize("invalid_database", [False, True])
+@pytest.mark.parametrize("key_source", ["environment", "constructor"])
+def test_explicit_demo_discards_environment_and_constructor_keys_before_validation(
+    tmp_path, monkeypatch, invalid_database, key_source
+):
+    monkeypatch.setenv("APP_MODE", "demo")
+    monkeypatch.setenv("KEITARO_API_KEY", "synthetic-environment-review-marker")
+    arguments = {
+        "_env_file": None,
+        "database_url": f"sqlite:///{tmp_path / 'drafts.db'}",
+        "demo_database_url": f"sqlite:///{tmp_path / 'resources.db'}",
+    }
+    if key_source == "constructor":
+        arguments["keitaro_api_key"] = "synthetic-constructor-review-marker"
+    if invalid_database:
+        arguments["demo_database_url"] = arguments["database_url"]
+        with pytest.raises(ValidationError) as rejected:
+            Settings(**arguments)
+        assert "review-marker" not in str(rejected.value)
+        assert "review-marker" not in repr(rejected.value.errors())
+    else:
+        assert Settings(**arguments).keitaro_api_key.get_secret_value() == ""

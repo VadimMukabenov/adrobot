@@ -26,14 +26,27 @@ class Settings(BaseSettings):
             # A live checkout's dotenv can contain both credentials and its draft database.
             # Explicit demo startup must not import either of them.
             values["_env_file"] = None
+            values["keitaro_api_key"] = ""
             if "database_url" not in values and "database_url" not in environment:
                 values["database_url"] = "sqlite:///./adrobot-demo.db"
         super().__init__(**values)
-        if self.app_mode == "demo" and selected_mode != "demo":
-            raise ValueError(
-                "Select demo with process APP_MODE=demo or Settings(app_mode='demo'); "
-                "dotenv cannot select demo mode."
-            )
+
+    @classmethod
+    def settings_customise_sources(
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+    ):
+        def live_dotenv():
+            values = dotenv_settings()
+            selected_mode = init_settings().get("app_mode", env_settings().get("app_mode"))
+            if values.get("app_mode") == "demo" and selected_mode not in ("live", "demo"):
+                # Reject before these values enter model validation: errors can include inputs.
+                raise ValueError(
+                    "Select demo with process APP_MODE=demo or Settings(app_mode='demo'); "
+                    "dotenv cannot select demo mode."
+                )
+            return values
+
+        return init_settings, env_settings, live_dotenv, file_secret_settings
 
     @model_validator(mode="after")
     def isolate_demo_resources(self):

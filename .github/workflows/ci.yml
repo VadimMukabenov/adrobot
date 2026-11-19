@@ -32,7 +32,7 @@ jobs:
       - name: Test backend
         run: uv run --frozen pytest
       - name: Lint backend
-        run: uv run --frozen ruff check adrobot tests
+        run: uv run --frozen ruff check --config pyproject.toml adrobot tests ../frontend/e2e/serve.py
       - name: Migrate an empty database and verify schema
         env:
           DATABASE_URL: sqlite:///${{ runner.temp }}/migration-check.db

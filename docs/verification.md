@@ -130,3 +130,42 @@ Logs contain only method, exception class and attempt count, without credentials
 response bodies or exception text. Regression tests reproduced the missing retry
 before the fix. All80backend tests and Ruff passed; independent review found no
 blockers. The frontend was unchanged.
+
+## Reviewer-ready delivery: 19 November 2026
+
+- Backend: **112 tests passed** and Ruff passed, including explicit demo/live
+  source isolation, separate SQLite files, persistent demo resources and
+  constructor/environment/dotenv validation errors without credential input.
+  Fresh Alembic upgrade, schema check and repeated upgrade passed.
+- Frontend: **34 behavior tests passed**, TypeScript and production build passed.
+  Regressions cover late/failed metadata, stale selection responses, synchronous
+  operation locks and returning to a campaign while an earlier write completes.
+- **Three automated Playwright scenarios passed** through the production React
+  bundle and real FastAPI/SQLAlchemy/HTTP adapter. A loopback tracker fixture
+  exercises clean browser setup, delayed lookups, two-stream creation, local
+  Add/Cancel, 34/33/33 and 25/38/37 allocation, draft reload, Remove/Restore,
+  Push/read-back, external conflicts, lost write responses and reconciliation.
+  Actual tracker resources and write counts are asserted. Local runs used
+  installed Chrome; CI installs Playwright Chromium. These tests do not claim
+  new live Keitaro verification.
+- Source demo starts without terminal input or credentials on a separate
+  loopback port, Compose project and volume. The browser visibly labels it
+  local demo; a pinned 25/38/37 draft survived page reload. Independent Docker
+  smoke used an empty isolated release volume, verified migrations, seeded
+  resources, compiled React and UID10001, then recreated the container and
+  compared the exact persisted campaign draft. The user's live instance was
+  preserved.
+- Independent reviews found and reproduced demo source-validation, navigation
+  completion, metadata retry and ambient Compose-project isolation issues.
+  Regression tests first failed, then passed after scoped fixes. Launcher and
+  reset commands now select their demo/release projects explicitly.
+- The checked-in CI runs backend/migrations, frontend, real HTTP browser E2E
+  and an isolated Docker smoke test. Main publication reuses that smoke-tested
+  image, tags the full commit SHA, and verifies anonymous GHCR pull. Actual
+  remote run/publication results must be checked in the linked GitHub Actions
+  run; local checks alone are not evidence of registry availability.
+- A fresh full `npm audit` reports **zero vulnerabilities**, superseding the
+  earlier development-tool advisory snapshot above.
+
+No real tracker credentials, saved connection, campaigns, paid traffic or
+lead data were used or changed by this delivery's automated scenarios.

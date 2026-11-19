@@ -24,3 +24,5 @@ artifacts/
 
 **/keitaro.json
 **/.keitaro-*
+
+frontend/playwright-report/

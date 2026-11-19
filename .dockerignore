@@ -16,3 +16,6 @@ docs/progress.md
 
 **/keitaro.json
 **/.keitaro-*
+
+frontend/test-results
+frontend/playwright-report

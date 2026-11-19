@@ -1,11 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 fail() { printf '%s\n' "$1" >&2; exit 1; }
+app_mode=live
+ready_image=false
+for argument in "$@"; do
+  case "$argument" in
+    --demo) app_mode=demo ;;
+    --image) ready_image=true ;;
+    --help) printf 'Usage: %s [--demo] [--image]\n' "$0"; exit 0 ;;
+    *) fail "Unknown option: $argument. Use --help." ;;
+  esac
+done
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 test -f compose.yaml || fail 'The start script must stay inside the Adrobot clone.'
+compose=(docker compose)
+startup=(up --build --wait)
+if [ "$app_mode" = demo ] || [ "$ready_image" = true ]; then
+  # Explicit isolated modes never import an operator's live dotenv or exported key.
+  unset KEITARO_API_KEY KEITARO_BASE_URL DATABASE_URL DEMO_DATABASE_URL CONNECTION_FILE
+  compose+=(--env-file /dev/null)
+fi
+if [ "$ready_image" = true ]; then
+  export APP_MODE="$app_mode"
+  if [ "$app_mode" = demo ]; then export ADROBOT_PORT="${ADROBOT_PORT:-${ADROBOT_DEMO_PORT:-8766}}"; fi
+  compose+=(-p "adrobot-release-$app_mode" -f compose.release.yaml)
+  startup=(up --pull always --wait)
+elif [ "$app_mode" = demo ]; then
+  compose+=(-p adrobot-demo -f compose.demo.yaml)
+fi
 command -v docker >/dev/null || fail 'Install Docker with Compose v2.24+ first.'
 docker compose version >/dev/null
 docker info >/dev/null 2>&1 || fail 'Start Docker and allow this OS user to access it, then retry.'
-docker compose up --build --wait
-address=$(docker compose port app 8765)
-printf '\nOpen Adrobot: http://%s/\nConnect to Keitaro on that page.\n' "$address"
+"${compose[@]}" "${startup[@]}"
+address=$("${compose[@]}" port app 8765)
+printf '\nOpen Adrobot: http://%s/\n' "$address"
+if [ "$app_mode" = demo ]; then
+  printf 'Demo data is local. No Keitaro key is needed.\n'
+else
+  printf 'Connect to Keitaro on that page.\n'
+fi

@@ -1,3 +1,37 @@
+# Modes and startup
+
+`~/adrobot/start --demo` starts an explicitly labelled local demo at
+http://127.0.0.1:8766/. It uses its own Compose project/volume and four sample
+offers. Both tracker resources and application drafts survive restarts. No API
+key or real Keitaro is involved; errors in live mode never switch to demo.
+The launcher ignores a live `.env` and inherited connection credentials in demo.
+Select demo via the launcher/process `APP_MODE=demo`, never by adding it to a
+live dotenv file. The application and demo tracker need separate SQLite files.
+
+`~/adrobot/start` keeps the live application at http://127.0.0.1:8765/ and its
+existing volume/connection. Both modes can run together.
+
+Add `--image` to pull a ready image instead of building. Image mode has its own
+mode-specific volume; a first live image launch needs web connection setup.
+To pin a release, set `ADROBOT_IMAGE=ghcr.io/vadimmukabenov/adrobot:sha-COMMIT_SHA`
+where COMMIT_SHA is the full published Git commit. The CI run records the registry
+digest. Published images support linux/amd64.
+
+Repeat a clean demo (deletes only demo drafts/sample data):
+
+```bash
+docker compose -p adrobot-demo -f ~/adrobot/compose.demo.yaml down --volumes && ~/adrobot/start --demo
+```
+
+For image mode, reset its separate demo volume with:
+
+```bash
+APP_MODE=demo docker compose --env-file /dev/null -p adrobot-release-demo -f ~/adrobot/compose.release.yaml down --volumes
+```
+
+This is a separate volume from source-built demo. Live reset is destructive to local live drafts/connection;
+make a backup before using `down --volumes`.
+
 # Using Adrobot
 
 A FastAPI + SQLAlchemy + React editor for Keitaro campaigns. Create two-stream campaigns, edit offer allocations locally, and publish only when ready.

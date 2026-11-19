@@ -8,6 +8,7 @@ services:
       - path: .env
         required: false
     environment:
+      APP_MODE: live
       KEITARO_BASE_URL: ${KEITARO_BASE_URL:-https://tlgk.host}
       KEITARO_API_KEY: ${KEITARO_API_KEY:-}
       DATABASE_URL: sqlite:////data/adrobot.db

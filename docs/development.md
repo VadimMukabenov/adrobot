@@ -63,3 +63,36 @@ intended database.
 
 See [verification](verification.md) for the exact checked scope and limitations, and [AI usage](ai-usage.md) for how agents contributed.
 
+
+
+## Browser E2E and CI
+
+The browser suite starts the built React frontend and real FastAPI/SQLAlchemy app
+with an empty migrated database, plus an isolated HTTP tracker fixture. It enters
+a synthetic key through the setup page. It never reads an operator's dotenv or
+contacts real Keitaro. Tests inspect actual tracker resources and write counts.
+
+```bash
+cd frontend
+npm ci
+npx playwright install --with-deps chromium
+npm run test:e2e
+```
+
+Install backend development dependencies first with `uv sync --frozen` from
+`backend`. Set `ADROBOT_E2E_PYTHON` if its Python is outside `backend/.venv`.
+An installed Chrome can be selected locally with
+`ADROBOT_E2E_BROWSER_CHANNEL=chrome npm run test:e2e`; CI uses the Playwright-managed
+Chromium version. The suite uses loopback ports 18781/18782 by default; override
+`ADROBOT_E2E_TRACKER_PORT` and `ADROBOT_E2E_APP_PORT` together if needed. Existing
+services on those ports are never reused or stopped.
+
+Coverage includes fresh setup, delayed metadata, both configured creation
+streams, local Add/Cancel, pin allocation, draft reload, Remove/Restore,
+external conflicts, an accepted PUT with a lost response and a failed read-back,
+and a lost creation response resumed with the same operation identity.
+
+GitHub Actions runs backend tests/lint, fresh migrations/schema checks, frontend
+tests/types/build, the browser suite and an isolated Docker demo smoke. Only a
+successful main-branch run publishes its smoke-tested image. Browser failure
+traces and screenshots are retained as CI artifacts.

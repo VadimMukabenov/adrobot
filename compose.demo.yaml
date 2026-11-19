@@ -1,0 +1,16 @@
+name: adrobot-demo
+services:
+  app:
+    image: adrobot:demo-local
+    build: .
+    ports:
+      - "127.0.0.1:${ADROBOT_DEMO_PORT:-8766}:8765"
+    environment:
+      APP_MODE: demo
+      DATABASE_URL: sqlite:////data/adrobot.db
+      DEMO_DATABASE_URL: sqlite:////data/demo-keitaro.db
+    volumes:
+      - demo-data:/data
+    init: true
+volumes:
+  demo-data:

@@ -29,7 +29,6 @@ function CampaignApp({ mode }: { mode: AppMode }) {
     setSelected,
     loading,
     loadIndex,
-    clearError,
   } = index;
   const [creating, setCreating] = useState(false);
   const editor = useCampaignEditor(creating ? null : selected);
@@ -60,7 +59,6 @@ function CampaignApp({ mode }: { mode: AppMode }) {
           }}
           onCreate={() => {
             setCreating(true);
-            clearError();
           }}
         />
         <main className="main-content">

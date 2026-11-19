@@ -503,6 +503,42 @@ it("offers a metadata retry while keeping an already loaded campaign usable", as
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
+it("keeps failed metadata recoverable after opening the creation form", async () => {
+  let metadataReads = 0;
+  serve((url) =>
+    url === "/api/lookups"
+      ? Promise.resolve(
+          ++metadataReads === 1
+            ? response({ detail: "Options unavailable" }, 502)
+            : response({
+                domains: [{ id: 1, name: "Recovered domain" }],
+                groups: [{ id: 2, name: "Recovered group" }],
+                traffic_sources: [{ id: 3, name: "Recovered source" }],
+              }),
+        )
+      : undefined,
+  );
+  render(<App />);
+  await screen.findByRole("heading", { name: "test_mukabenov_1" });
+  expect(screen.getByRole("alert")).toHaveTextContent("Options unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+  expect(screen.getByText(/Waiting for campaign options/)).toBeInTheDocument();
+  const name = screen.getByRole("textbox", { name: "Campaign name" });
+  fireEvent.change(name, { target: { value: "test_mukabenov_recovery" } });
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await screen.findByRole("option", { name: "Recovered domain" });
+  expect(screen.getByRole("combobox", { name: "Domain" })).toHaveValue("1");
+  expect(screen.getByRole("combobox", { name: "Group" })).toHaveValue("2");
+  expect(screen.getByRole("combobox", { name: "Traffic source" })).toHaveValue(
+    "3",
+  );
+  expect(name).toHaveValue("test_mukabenov_recovery");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(/Waiting for campaign options/),
+  ).not.toBeInTheDocument();
+});
+
 it("reads back an uncertain mutation without automatically repeating the write", async () => {
   let reads = 0;
   const fetch = serve((url) => {

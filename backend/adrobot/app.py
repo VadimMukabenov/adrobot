@@ -55,6 +55,7 @@ def create_app(settings=None, gateway=None, db=None):
     def health():
         return {
             "status": "ok",
+            "mode": settings.app_mode,
             "configured": gateway.configured,
             "campaign_prefix": settings.campaign_prefix,
         }

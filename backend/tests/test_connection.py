@@ -133,5 +133,5 @@ def test_environment_configuration_takes_precedence_over_saved_setup(connection)
     settings.keitaro_base_url = "https://env.local"
     with TestClient(create_app(settings), base_url="http://127.0.0.1") as client:
         response = client.get("/api/connection")
-        assert response.json() == {"configured": True, "url": "https://env.local"}
+        assert response.json() == {"configured": True, "url": "https://env.local", "mode": "live"}
         assert "secret" not in response.text

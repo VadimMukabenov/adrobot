@@ -12,6 +12,7 @@ from fastapi import Request
 from pydantic import BaseModel, SecretStr
 from sqlalchemy.engine import make_url
 
+from .demo import DemoGateway
 from .errors import AppError
 from .keitaro import KeitaroGateway
 
@@ -50,6 +51,12 @@ def tracker_origin(value: str) -> str:
 
 class Connection:
     def __init__(self, settings, gateway=None):
+        self.mode = settings.app_mode
+        if self.mode == "demo":
+            # Select the local boundary before touching any saved or environment secret.
+            self.url = "local://demo"
+            self.gateway = DemoGateway(settings.demo_database_url, settings.campaign_prefix)
+            return
         database = make_url(settings.database_url).database
         self.path = settings.connection_file or (
             Path(database).resolve().parent / "keitaro.json"
@@ -84,6 +91,7 @@ class Connection:
         self.local_request(request)
         return {
             "configured": self.configured,
+            "mode": self.mode,
             "url": self.url,
             **({"setup_token": self.token} if not self.configured else {}),
         }
@@ -125,7 +133,7 @@ class Connection:
             finally:
                 Path(temporary).unlink(missing_ok=True)
             self.url, self.gateway = url, candidate
-            return {"configured": True, "url": url}
+            return {"configured": True, "url": url, "mode": self.mode}
 
     def __getattr__(self, name):
         if self.gateway is None:

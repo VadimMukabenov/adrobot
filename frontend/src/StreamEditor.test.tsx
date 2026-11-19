@@ -93,7 +93,9 @@ describe("stream actions", () => {
       />,
     );
     expect(screen.getByText("Remote result is unknown.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /check publication status/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /check publication status/i }),
+    );
     expect(action).toHaveBeenCalledWith("reconcile");
     expect(
       screen.getByRole("button", { name: "Remove offer 1" }),
@@ -137,3 +139,53 @@ it("allows local Cancel for a deleted stream while retaining the draft and block
   fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
   expect(action).toHaveBeenCalledWith("cancel");
 });
+
+it.each([
+  {
+    name: "no active offers",
+    total: 0,
+    offers: stream.offers.map((offer) => ({
+      ...offer,
+      removed: true,
+      share: 0,
+    })),
+    reason: /restore an offer or add another/i,
+  },
+  {
+    name: "active weights below 100%",
+    total: 25,
+    offers: [{ ...stream.offers[0], share: 25, pinned: true }],
+    reason: /active offer weights must total 100%/i,
+  },
+])(
+  "explains and blocks publication with $name, while allowing recovery",
+  ({ total, offers, reason }) => {
+    const action = vi.fn();
+    const edit = vi.fn();
+    const props = {
+      stream: { ...stream, total, offers },
+      index: 2,
+      busy: false,
+      writable: true,
+      onEdit: edit,
+      onAction: action,
+    };
+    const { rerender } = render(<StreamEditor {...props} />);
+    const publish = screen.getByRole("button", { name: /publish to keitaro/i });
+    expect(publish).toBeDisabled();
+    expect(publish).toHaveAccessibleDescription(reason);
+    expect(screen.getByRole("alert")).toHaveTextContent(reason);
+    fireEvent.click(publish);
+    expect(action).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Discard draft" })).toBeEnabled();
+    if (offers.every((offer) => offer.removed)) {
+      fireEvent.click(screen.getByRole("button", { name: "Restore offer 1" }));
+      expect(edit).toHaveBeenCalledWith("restore", 1);
+    }
+    rerender(<StreamEditor {...props} stream={stream} />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(publish).toBeEnabled();
+    fireEvent.click(publish);
+    expect(action).toHaveBeenCalledWith("push");
+  },
+);

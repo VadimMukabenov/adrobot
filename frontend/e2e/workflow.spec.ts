@@ -313,6 +313,7 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
     .getByRole("button", { name: "Publish to Keitaro", exact: true })
     .click();
   await expect(page.getByRole("alert")).toContainText("changed externally");
+  await expect(page.getByRole("alert")).toBeInViewport();
   await expectWeights(editor, { 101: 30, 102: 35, 103: 35 });
   expect(writes(await remote(request), "PUT", `streams/${sid}`)).toHaveLength(
     beforeConflict,
@@ -543,6 +544,74 @@ test("matching-country visitors receive the Google redirect and other visitors o
     .click();
   const visitor = await popupPromise;
   await expect(visitor).toHaveURL(url);
-  await expect(visitor.getByRole("heading", { name: "Offer 101" })).toBeVisible();
+  await expect(
+    visitor.getByRole("heading", { name: "Offer 101" }),
+  ).toBeVisible();
   await visitor.close();
+});
+
+test("removing the only offer explains blocked publication and Restore recovers the draft", async ({
+  page,
+  request,
+}) => {
+  await open(page, request);
+  const name = "test_mukabenov_e2e_empty_offer";
+  await newCampaign(page, request, name);
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  const created = (await remote(request)).campaigns.find(
+    (item) => item.name === name,
+  )!;
+  const sid = (await remote(request)).streams.find(
+    (item) => item.campaign_id === created.id && item.position === 2,
+  )!.id;
+  const editor = offerSection(page);
+  const publish = editor.getByRole("button", {
+    name: "Publish to Keitaro",
+    exact: true,
+  });
+  await editor
+    .getByRole("button", { name: "Remove offer 101", exact: true })
+    .click();
+  await expect(publish).toHaveAttribute("aria-busy", "false");
+  await expect(publish).toBeDisabled();
+  await expect(editor.getByRole("alert")).toContainText(
+    "Restore an offer or add another",
+  );
+  await expect(editor.getByRole("alert")).toBeInViewport();
+  expect(writes(await remote(request), "PUT", `streams/${sid}`)).toHaveLength(
+    0,
+  );
+  await editor
+    .getByRole("button", { name: "Restore offer 101", exact: true })
+    .click();
+  await expectWeights(editor, { 101: 100 });
+  await expect(editor.getByRole("alert")).toHaveCount(0);
+  // Restoring the original offer exactly restores the published baseline.
+  // No further publication is needed until there is an actual new change.
+  await expect(publish).toBeDisabled();
+  await expect(
+    editor.getByText("Unpublished changes", { exact: true }),
+  ).toHaveCount(0);
+  expect(writes(await remote(request), "PUT", `streams/${sid}`)).toHaveLength(
+    0,
+  );
+  await chooseOffer(editor, 102, "Add offer");
+  await expectWeights(editor, { 101: 50, 102: 50 });
+  await expect(publish).toBeEnabled();
+  await publish.click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Published and confirmed" }),
+  ).toBeInViewport();
+  await expect(
+    editor.getByText("Unpublished changes", { exact: true }),
+  ).toHaveCount(0);
+  expect(
+    (await remote(request)).streams.find((item) => item.id === sid)!.offers,
+  ).toEqual([
+    { offer_id: 101, share: 50, state: "active" },
+    { offer_id: 102, share: 50, state: "active" },
+  ]);
+  expect(writes(await remote(request), "PUT", `streams/${sid}`)).toHaveLength(
+    1,
+  );
 });

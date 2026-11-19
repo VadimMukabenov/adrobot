@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { AlertTriangle, Network } from "lucide-react";
 import type { EditAction, Stream, StreamAction } from "../types";
 import { OfferSearch } from "./OfferSearch";
@@ -20,7 +21,15 @@ export function StreamEditor({
   onEdit,
   onAction,
 }: Props) {
+  const publicationReasonId = useId();
   const blocked = busy || !writable || !s.available || s.status !== "ready";
+  const publicationReason = !s.offers.some((offer) => !offer.removed)
+    ? "Restore an offer or add another before publishing. At least one active offer is required."
+    : s.total !== 100
+      ? "Active offer weights must total 100% before publishing. Change the weights or unpin an offer to share the remainder."
+      : "";
+  const showPublicationReason =
+    s.editable && s.dirty && s.status === "ready" && !!publicationReason;
   return (
     <section
       className={`stream ${s.dirty ? "pending" : ""}`}
@@ -61,16 +70,23 @@ export function StreamEditor({
               className="button primary"
               aria-label="Publish to Keitaro"
               aria-busy={busy}
-              disabled={blocked || !s.dirty}
+              disabled={blocked || !s.dirty || !!publicationReason}
+              aria-describedby={
+                showPublicationReason ? publicationReasonId : undefined
+              }
               onClick={() => onAction("push")}
             >
               {busy ? "Working…" : "Publish to Keitaro"}
             </button>
           </div>
-        ) : (
-          null
-        )}
+        ) : null}
       </div>
+      {showPublicationReason && (
+        <p id={publicationReasonId} role="alert" className="notice warning">
+          {publicationReason} Your draft is saved; these changes have not been
+          published.
+        </p>
+      )}
       {!s.available && (
         <p className="notice error">
           This stream is no longer available in Keitaro.

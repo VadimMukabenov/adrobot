@@ -1019,3 +1019,11 @@ input:disabled {
 .visitor-link-controls a {
   text-decoration: none;
 }
+
+/* Keep operation results visible when a lower stream is being edited. */
+.main-content > .notice {
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  box-shadow: 0 3px 12px rgb(16 24 45 / 10%);
+}

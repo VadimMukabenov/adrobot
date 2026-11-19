@@ -1,5 +1,8 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
+from threading import Lock
+from time import monotonic
 from urllib.parse import urlsplit
 
 import httpx
@@ -16,6 +19,8 @@ class KeitaroGateway:
             raise ValueError("Keitaro URL must be an HTTP(S) origin without credentials.")
         self.base_url = base_url.rstrip("/") + "/admin_api/v1/"
         self._api_key, self._transport = api_key, transport
+        self._snapshots = {}
+        self._snapshot_lock = Lock()
         self._client = httpx.Client(
             base_url=self.base_url,
             headers={"Api-Key": self._api_key},
@@ -98,17 +103,47 @@ class KeitaroGateway:
     def get_stream(self, stream_id):
         return self.request("GET", f"streams/{stream_id}")
 
-    def list_offers(self, query=""):
-        offers = self.request("GET", "offers")
+    def _remember(self, name, value, started):
+        with self._snapshot_lock:
+            self._snapshots[name] = (started + 60, deepcopy(value))
+
+    def _recent(self, name):
+        with self._snapshot_lock:
+            snapshot = self._snapshots.get(name)
+            if snapshot is not None and monotonic() < snapshot[0]:
+                return deepcopy(snapshot[1])
+            return None
+
+    def creation_lookups(self):
+        snapshot = self._recent("lookups")
+        return snapshot if snapshot is not None else self.lookups()
+
+    def creation_offers(self, query=""):
+        snapshot = self._recent("offers")
+        if snapshot is not None:
+            return self._filter_offers(snapshot, query)
+        return self.list_offers(query)
+
+    @staticmethod
+    def _filter_offers(offers, query):
         query = query.strip().casefold()
         return [
-            dict(id=int(o["id"]), name=o["name"], state=o.get("state", "active"))
-            for o in offers
-            if o.get("state", "active") == "active"
-            and (not query or query == str(o["id"]) or query in o["name"].casefold())
+            o for o in offers
+            if not query or query == str(o["id"]) or query in o["name"].casefold()
         ]
 
+    def list_offers(self, query=""):
+        started = monotonic()
+        offers = [
+            dict(id=int(o["id"]), name=o["name"], state=o.get("state", "active"))
+            for o in self.request("GET", "offers")
+            if o.get("state", "active") == "active"
+        ]
+        self._remember("offers", offers, started)
+        return self._filter_offers(offers, query)
+
     def lookups(self):
+        started = monotonic()
         paths = [
             ("domains", "domains"),
             ("groups", "groups?type=campaigns"),
@@ -116,7 +151,7 @@ class KeitaroGateway:
         ]
         with ThreadPoolExecutor(max_workers=3) as pool:
             results = list(pool.map(lambda pair: self.request("GET", pair[1]), paths))
-        return {
+        lookups = {
             name: [
                 dict(id=int(x["id"]), name=x["name"])
                 for x in rows
@@ -124,6 +159,8 @@ class KeitaroGateway:
             ]
             for (name, _), rows in zip(paths, results, strict=True)
         }
+        self._remember("lookups", lookups, started)
+        return lookups
 
     def update_stream(self, stream_id, offers):
         # Do not echo a GET payload: that could overwrite unrelated settings or send read-only IDs.

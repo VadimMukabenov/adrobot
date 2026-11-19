@@ -81,7 +81,9 @@ class Creator:
                     raise AppError(409, "Alias is ambiguous. Manual inspection is required.")
                 campaign = matches[0] if matches else None
             if existing is not None:
-                self._validate_dependencies(request, payload)
+                # Recovery must detect resources removed since the first attempt.
+                self._validate_dependencies(request, payload, allow_cached=False)
+            created_now = campaign is None
             if campaign is None:
                 self._stage(request.operation_id, "creating_campaign")
                 campaign = self.gateway.create_campaign(
@@ -97,7 +99,9 @@ class Creator:
                 )
             campaign_id = int(campaign["id"])
             self._stage(request.operation_id, "campaign_created", campaign_id=campaign_id)
-            streams = self.gateway.list_streams(campaign_id)
+            # Only recovery needs to discover existing streams. A fresh campaign
+            # is still disabled, and the final read-back checks its complete routing.
+            streams = [] if created_now else self.gateway.list_streams(campaign_id)
             definitions = [
                 dict(
                     campaign_id=campaign_id,
@@ -138,9 +142,11 @@ class Creator:
                     self._stage(request.operation_id, f"creating_stream_{definition['position']}")
                     streams.append(self.gateway.create_stream(definition))
             self._stage(request.operation_id, "verifying_streams")
-            actual = self.gateway.list_streams(campaign_id)
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                stream_read = pool.submit(self.gateway.list_streams, campaign_id)
+                campaign_read = pool.submit(self.gateway.get_campaign, campaign_id)
+                actual, campaign = stream_read.result(), campaign_read.result()
             self._verify(actual, request)
-            campaign = self.gateway.get_campaign(campaign_id)
             if (
                 campaign.get("name") != request.name
                 or int(campaign.get("domain_id") or 0) != request.domain_id
@@ -171,11 +177,16 @@ class Creator:
                 }
         return self.operation(request.operation_id)
 
-    def _validate_dependencies(self, request, payload):
+    def _validate_dependencies(self, request, payload, allow_cached=True):
         # These reads are independent. Complete both before any remote write.
+        lookups = self.gateway.lookups
+        offers = self.gateway.list_offers
+        if allow_cached:
+            lookups = getattr(self.gateway, "creation_lookups", lookups)
+            offers = getattr(self.gateway, "creation_offers", offers)
         with ThreadPoolExecutor(max_workers=2) as pool:
-            lookup_read = pool.submit(self.gateway.lookups)
-            offer_read = pool.submit(self.gateway.list_offers, str(request.offer_id))
+            lookup_read = pool.submit(lookups)
+            offer_read = pool.submit(offers, str(request.offer_id))
             lookups, offers = lookup_read.result(), offer_read.result()
         for field, group in [
             ("domain_id", "domains"),

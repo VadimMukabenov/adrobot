@@ -223,3 +223,46 @@ def test_access_denied_is_not_retried():
     with pytest.raises(AppError):
         gateway.request("GET", "campaigns")
     assert len(calls) == 1
+
+
+def test_creation_snapshots_expire_and_explicit_reads_stay_fresh(monkeypatch):
+    import adrobot.keitaro as module
+
+    clock = [100.0]
+    monkeypatch.setattr(module, "monotonic", lambda: clock[0], raising=False)
+    resources = {
+        "domains": [{"id": 1, "name": "Domain"}],
+        "groups": [{"id": 2, "name": "Group"}],
+        "traffic_sources": [{"id": 3, "name": "Source"}],
+        "offers": [{"id": 4, "name": "Blue", "state": "active"}],
+    }
+    calls = []
+
+    def handle(request):
+        key = request.url.path.rsplit("/", 1)[-1]
+        calls.append(key)
+        return httpx.Response(200, json=resources[key])
+
+    gateway = KeitaroGateway(
+        "https://tracker.example", "synthetic", transport=httpx.MockTransport(handle)
+    )
+    gateway.lookups()
+    gateway.list_offers("blue")
+    cached_lookups = getattr(gateway, "creation_lookups", gateway.lookups)
+    cached_offers = getattr(gateway, "creation_offers", gateway.list_offers)
+    copy = cached_lookups()
+    copy["domains"].clear()
+    offers = cached_offers("4")
+    offers[0]["name"] = "mutated by caller"
+    assert cached_lookups()["domains"][0]["id"] == 1
+    assert cached_offers("blue")[0]["name"] == "Blue"
+    assert len(calls) == 4
+    resources["offers"][0]["state"] = "deleted"
+    clock[0] = 161
+    assert cached_offers("4") == []
+    assert len(calls) == 5
+    assert cached_lookups()["groups"][0]["id"] == 2
+    assert len(calls) == 8
+    resources["offers"][0]["state"] = "active"
+    assert gateway.list_offers("4")[0]["id"] == 4
+    assert len(calls) == 9

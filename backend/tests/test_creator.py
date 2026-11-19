@@ -225,6 +225,8 @@ def test_creator_rejects_non_test_names_and_unknown_metadata_before_any_remote_w
 
 def test_resume_retains_operation_if_offer_becomes_unavailable(setup):
     c, remote, *_ = setup
+    snapshot = remote.list_offers("1")
+    remote.creation_offers = lambda query="": snapshot
     remote.campaign_timeout_once = True
     assert c.post("/api/campaigns", json=body()).status_code == 202
     remote.offers[1]["state"] = "deleted"
@@ -292,3 +294,80 @@ def test_resume_never_activates_modified_routing(setup, change):
         country[field] = value
     assert c.post("/api/campaigns", json=body()).status_code == 202
     assert remote.get_campaign(8)["state"] == "disabled"
+
+
+def test_form_dictionary_reads_are_reused_and_clean_creation_needs_seven_http_calls(setup):
+    import json
+
+    import httpx
+    from fastapi.testclient import TestClient
+
+    from adrobot.app import create_app
+    from adrobot.keitaro import KeitaroGateway
+
+    _, remote, settings, db = setup
+    calls = []
+
+    def handle(request):
+        path = request.url.path.removeprefix("/admin_api/v1/")
+        calls.append((request.method, path))
+        data = json.loads(request.content) if request.content else None
+        if path in ("domains", "groups", "traffic_sources"):
+            result = remote.lookups()[path]
+        elif path == "offers":
+            result = remote.list_offers()
+        elif path == "campaigns" and request.method == "POST":
+            result = remote.create_campaign(data)
+        elif path == "streams" and request.method == "POST":
+            result = remote.create_stream(data)
+        elif path.endswith("/streams"):
+            result = remote.list_streams(int(path.split("/")[1]))
+        elif request.method == "PUT":
+            result = remote.update_campaign(int(path.split("/")[1]), data)
+        else:
+            result = remote.get_campaign(int(path.split("/")[1]))
+        return httpx.Response(200, json=result)
+
+    gateway = KeitaroGateway(
+        "https://tracker.example", "synthetic", transport=httpx.MockTransport(handle)
+    )
+    with TestClient(create_app(settings, gateway, db)) as client:
+        assert client.get("/api/lookups").status_code == 200
+        assert client.get("/api/offers?q=1").status_code == 200
+        calls.clear()
+        response = client.post("/api/campaigns", json=body())
+        assert response.json()["status"] == "confirmed"
+        assert len(calls) == 7
+        assert calls.count(("GET", "campaigns/8/streams")) == 1
+        assert calls.count(("GET", "campaigns/8")) == 2
+
+
+def test_clean_creation_reads_back_campaign_and_streams_concurrently(setup):
+    from threading import Barrier
+
+    client, remote, *_ = setup
+    gate = Barrier(2, timeout=2)
+    streams, campaign = remote.list_streams, remote.get_campaign
+    campaign_reads = 0
+
+    def read_streams(campaign_id):
+        result = streams(campaign_id)
+        assert len(result) == 2, "Do not read an empty fresh campaign before creating its streams"
+        gate.wait()
+        return result
+
+    def read_campaign(campaign_id):
+        nonlocal campaign_reads
+        campaign_reads += 1
+        if campaign_reads == 1:
+            gate.wait()
+        return campaign(campaign_id)
+
+    remote.list_streams, remote.get_campaign = read_streams, read_campaign
+    # Fixture helpers also use get_campaign while writing; keep those acknowledgements independent.
+    remote.create_campaign = lambda data: remote.campaigns.setdefault(8, dict(data, id=8)).copy()
+    remote.update_campaign = lambda campaign_id, data: (
+        remote.campaigns[campaign_id].update(data) or remote.campaigns[campaign_id].copy()
+    )
+    response = client.post("/api/campaigns", json=body())
+    assert response.json()["status"] == "confirmed"

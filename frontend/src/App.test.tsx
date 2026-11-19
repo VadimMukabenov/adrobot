@@ -175,6 +175,142 @@ it("ignores a mutation success after leaving and returning to the same campaign"
   ).not.toBeInTheDocument();
 });
 
+it.each(["success", "failure"])(
+  "reads settled state after returning to a campaign with a pending push (%s)",
+  async (outcome) => {
+    const mutation = deferred();
+    const readBack = deferred();
+    let reads = 0;
+    const fetch = serve((url) => {
+      if (url === "/api/streams/10/push") return mutation.promise;
+      if (url === "/api/campaigns/1") {
+        if (++reads === 3) return readBack.promise;
+        const data = campaign(1, reads);
+        if (reads === 2) data.streams[0].status = "pushing";
+        return Promise.resolve(response(data));
+      }
+    });
+    render(<App />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Push to Keitaro" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_2" }));
+    await screen.findByRole("heading", { name: "test_mukabenov_2" });
+    fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_1" }));
+    await screen.findByText("Publication is running. Editing is locked.");
+    await act(async () =>
+      mutation.resolve(
+        outcome === "success"
+          ? response({ ...campaign(1).streams[0], dirty: false })
+          : response({ detail: "Response lost" }, 502),
+      ),
+    );
+    await waitFor(() => expect(reads).toBe(3));
+    expect(
+      screen.getByRole("button", { name: "Push to Keitaro" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.getByRole("button", { name: "Refresh from Keitaro" }),
+    ).toBeDisabled();
+    const settled = campaign(1, 3);
+    settled.streams[0].status = outcome === "success" ? "ready" : "uncertain";
+    settled.streams[0].dirty = outcome !== "success";
+    await act(async () => readBack.resolve(response(settled)));
+    expect(
+      screen.queryByText("Publication is running. Editing is locked."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Push to Keitaro" }),
+    ).toHaveAttribute("aria-busy", "false");
+    expect(
+      screen.getByRole("button", { name: "Refresh from Keitaro" }),
+    ).toBeEnabled();
+    if (outcome === "success") {
+      expect(screen.queryByText("Unpublished changes")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Published and confirmed in Keitaro."),
+      ).not.toBeInTheDocument();
+    } else {
+      expect(screen.getByRole("button", { name: "Reconcile" })).toBeEnabled();
+      expect(screen.getByRole("alert")).toHaveTextContent("Response lost");
+    }
+    expect(
+      fetch.mock.calls.filter(([url]) => url === "/api/streams/10/push"),
+    ).toHaveLength(1);
+  },
+);
+
+it.each([200, 404])(
+  "does not let an earlier campaign read (%s) overwrite settled push read-back",
+  async (status) => {
+    const mutation = deferred();
+    const returningRead = deferred();
+    let reads = 0;
+    serve((url) => {
+      if (url === "/api/streams/10/push") return mutation.promise;
+      if (url === "/api/campaigns/1") {
+        if (++reads === 2) return returningRead.promise;
+        const data = campaign(1, reads);
+        if (reads === 3) data.streams[0].dirty = false;
+        return Promise.resolve(response(data));
+      }
+    });
+    render(<App />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Push to Keitaro" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_2" }));
+    await screen.findByRole("heading", { name: "test_mukabenov_2" });
+    fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_1" }));
+    await waitFor(() => expect(reads).toBe(2));
+    await act(async () => mutation.resolve(response(campaign(1).streams[0])));
+    await screen.findByRole("heading", { name: "test_mukabenov_1" });
+    expect(screen.queryByText("Unpublished changes")).not.toBeInTheDocument();
+    const stale = campaign(1, 2);
+    stale.streams[0].status = "pushing";
+    await act(async () =>
+      returningRead.resolve(
+        response(status === 200 ? stale : { detail: "Not found" }, status),
+      ),
+    );
+    expect(
+      screen.queryByText("Publication is running. Editing is locked."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Unpublished changes")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  },
+);
+
+it("ignores settled push read-back after navigating to another campaign", async () => {
+  const mutation = deferred();
+  const readBack = deferred();
+  let reads = 0;
+  serve((url) => {
+    if (url === "/api/streams/10/push") return mutation.promise;
+    if (url === "/api/campaigns/1" && ++reads === 3) return readBack.promise;
+  });
+  render(<App />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Push to Keitaro" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_2" }));
+  await screen.findByRole("heading", { name: "test_mukabenov_2" });
+  fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_1" }));
+  await screen.findByRole("heading", { name: "test_mukabenov_1" });
+  await act(async () => mutation.resolve(response(campaign(1).streams[0])));
+  await waitFor(() => expect(reads).toBe(3));
+  fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_2" }));
+  await screen.findByRole("heading", { name: "test_mukabenov_2" });
+  await act(async () => readBack.resolve(response(campaign(1))));
+  expect(
+    screen.getByRole("heading", { name: "test_mukabenov_2" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Refresh from Keitaro" }),
+  ).toBeEnabled();
+});
+
 it("sends only one mutation when two events happen before controls re-render", async () => {
   const mutation = deferred();
   const fetch = serve((url) =>

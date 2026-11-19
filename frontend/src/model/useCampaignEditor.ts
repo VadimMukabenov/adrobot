@@ -27,9 +27,12 @@ export function useCampaignEditor(selected: number | null) {
   const [refreshingIds, setRefreshingIds] = useState<Set<number>>(new Set());
   const mutations = useRef(new Map<number, number>());
   const refreshes = useRef(new Set<number>());
+  const reads = useRef(0);
   const mounted = useRef(false);
   const current = (visit: Selection) =>
     mounted.current && currentSelection.current === visit;
+  const currentRead = (visit: Selection, read: number) =>
+    current(visit) && reads.current === read;
 
   useEffect(() => {
     mounted.current = true;
@@ -39,6 +42,7 @@ export function useCampaignEditor(selected: number | null) {
   }, []);
   useEffect(() => {
     const controller = new AbortController();
+    const read = ++reads.current;
     setView({ selection, campaign: null, error: "", notice: "" });
     if (selected !== null) {
       void (async () => {
@@ -49,16 +53,17 @@ export function useCampaignEditor(selected: number | null) {
               signal: controller.signal,
             });
           } catch (error) {
-            if (controller.signal.aborted || !current(selection)) return;
+            if (controller.signal.aborted || !currentRead(selection, read))
+              return;
             if (!(error instanceof ApiError) || error.status !== 404)
               throw error;
             campaign = await post<Campaign>(`/campaigns/${selected}/fetch`);
           }
-          if (!controller.signal.aborted && current(selection)) {
+          if (!controller.signal.aborted && currentRead(selection, read)) {
             setView({ selection, campaign, error: "", notice: "" });
           }
         } catch (error) {
-          if (!controller.signal.aborted && current(selection)) {
+          if (!controller.signal.aborted && currentRead(selection, read)) {
             setView({
               selection,
               campaign: null,
@@ -79,6 +84,25 @@ export function useCampaignEditor(selected: number | null) {
         previous.selection === visit ? update(previous) : previous,
       );
   };
+  async function readBack(id: number, error?: string) {
+    const visit = currentSelection.current;
+    if (!current(visit) || visit.id !== id) return;
+    // A new visit may have loaded the operation's intermediate state. Read the
+    // settled server state instead of applying a response from an earlier visit.
+    const read = ++reads.current;
+    if (error) updateView(visit, (previous) => ({ ...previous, error }));
+    try {
+      const data = await api<Campaign>(`/campaigns/${id}`);
+      if (currentRead(visit, read))
+        updateView(visit, (previous) => ({ ...previous, campaign: data }));
+    } catch (readError) {
+      if (currentRead(visit, read))
+        updateView(visit, (previous) => ({
+          ...previous,
+          error: previous.error || errorText(readError),
+        }));
+    }
+  }
   async function refresh() {
     if (
       !current(selection) ||
@@ -132,6 +156,10 @@ export function useCampaignEditor(selected: number | null) {
         expected_revision: stream.revision,
         ...edit,
       });
+      if (!current(visit)) {
+        await readBack(id);
+        return;
+      }
       updateView(visit, (previous) => ({
         ...previous,
         campaign: previous.campaign && {
@@ -150,18 +178,8 @@ export function useCampaignEditor(selected: number | null) {
                 : "Draft saved locally.",
       }));
     } catch (error) {
-      if (!current(visit)) return;
-      updateView(visit, (previous) => ({
-        ...previous,
-        error: errorText(error),
-      }));
-      try {
-        // Read back uncertain outcomes; never retry the write automatically.
-        const data = await api<Campaign>(`/campaigns/${id}`);
-        updateView(visit, (previous) => ({ ...previous, campaign: data }));
-      } catch {
-        /* Retain the current draft view if read-back also fails. */
-      }
+      // Read back uncertain outcomes; never retry the write automatically.
+      await readBack(id, errorText(error));
     } finally {
       mutations.current.delete(stream.id);
       if (mounted.current) setBusy(new Set(mutations.current.keys()));

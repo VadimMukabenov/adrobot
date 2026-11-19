@@ -180,9 +180,12 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
   const sid = streams[1].id;
   let editor = offerSection(page);
   await expect(
-    page.getByText("Routing stream · no offer list to edit here. Its redirects and filters are managed in Keitaro and stay unchanged when you publish offer edits.", {
-      exact: true,
-    }),
+    page.getByText(
+      "Routing stream · no offer list to edit here. Its redirects and filters are managed in Keitaro and stay unchanged when you publish offer edits.",
+      {
+        exact: true,
+      },
+    ),
   ).toBeVisible();
 
   await chooseOffer(editor, 102, "Add offer");
@@ -190,7 +193,9 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
   expect(
     (await remote(request)).streams.find((s) => s.id === sid)!.offers,
   ).toEqual([{ offer_id: 101, share: 100, state: "active" }]);
-  await editor.getByRole("button", { name: "Discard draft", exact: true }).click();
+  await editor
+    .getByRole("button", { name: "Discard draft", exact: true })
+    .click();
   await expect(weight(editor, 102)).toHaveCount(0);
   await expectWeights(editor, { 101: 100 });
 
@@ -292,7 +297,9 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
   expect(writes(await remote(request), "PUT", `streams/${sid}`)).toHaveLength(
     beforeConflict,
   );
-  await editor.getByRole("button", { name: "Discard draft", exact: true }).click();
+  await editor
+    .getByRole("button", { name: "Discard draft", exact: true })
+    .click();
   await expect(
     editor.getByRole("button", { name: "Discard draft", exact: true }),
   ).toBeDisabled();
@@ -353,6 +360,41 @@ test("a lost create response resumes the same persisted operation without a seco
   await page.reload();
   await page.getByRole("button", { name: "New campaign", exact: true }).click();
   await expect(
+    page.getByLabel("Country code", { exact: false }),
+  ).toBeEditable();
+  await page.getByLabel("Country code", { exact: false }).fill("DE");
+  await page
+    .getByLabel("Campaign name", { exact: true })
+    .fill("test_mukabenov_e2e_new_after_interruption");
+  await chooseOffer(page, 101, "Select offer");
+  await page
+    .getByRole("button", { name: "Create campaign", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "test_mukabenov_e2e_new_after_interruption",
+      exact: true,
+    }),
+  ).toBeVisible();
+  const newerState = await remote(request);
+  const newer = newerState.campaigns.find(
+    (c) => c.name === "test_mukabenov_e2e_new_after_interruption",
+  )!;
+  expect(
+    newerState.streams.find(
+      (s) => s.campaign_id === newer.id && s.position === 1,
+    )?.filters,
+  ).toEqual([expect.objectContaining({ name: "country", payload: ["DE"] })]);
+  await page.reload();
+  await page.getByRole("button", { name: "New campaign", exact: true }).click();
+  await page.getByText(/Previous creations available/).click();
+  await page
+    .getByRole("button", {
+      name: "Resume test_mukabenov_e2e_lost_create",
+      exact: true,
+    })
+    .click();
+  await expect(
     page.getByRole("button", {
       name: "Reconcile and resume this creation",
       exact: true,
@@ -410,7 +452,10 @@ test("an accepted write with unavailable read-back keeps the draft locked until 
     .getByRole("button", { name: "Publish to Keitaro", exact: true })
     .click();
   await expect(
-    editor.getByRole("button", { name: "Check publication status", exact: true }),
+    editor.getByRole("button", {
+      name: "Check publication status",
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
     editor.getByRole("button", { name: "Remove offer 101", exact: true }),
@@ -420,13 +465,19 @@ test("an accepted write with unavailable read-back keeps the draft locked until 
   );
   await page.reload();
   await expect(
-    offerSection(page).getByRole("button", { name: "Check publication status", exact: true }),
+    offerSection(page).getByRole("button", {
+      name: "Check publication status",
+      exact: true,
+    }),
   ).toBeVisible();
   await offerSection(page)
     .getByRole("button", { name: "Check publication status", exact: true })
     .click();
   await expect(
-    offerSection(page).getByRole("button", { name: "Check publication status", exact: true }),
+    offerSection(page).getByRole("button", {
+      name: "Check publication status",
+      exact: true,
+    }),
   ).toHaveCount(0);
   await expect(
     offerSection(page).getByRole("button", {

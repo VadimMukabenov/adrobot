@@ -31,6 +31,7 @@ function CampaignApp({ mode }: { mode: AppMode }) {
     loadIndex,
   } = index;
   const [creating, setCreating] = useState(false);
+  const [creationKey, setCreationKey] = useState(0);
   const editor = useCampaignEditor(creating ? null : selected);
   const { campaign, busy, refreshing, notice, refresh, mutate, retry } = editor;
   const error = index.error || editor.error;
@@ -58,6 +59,7 @@ function CampaignApp({ mode }: { mode: AppMode }) {
             setSelected(id);
           }}
           onCreate={() => {
+            setCreationKey((value) => value + 1);
             setCreating(true);
           }}
         />
@@ -85,6 +87,8 @@ function CampaignApp({ mode }: { mode: AppMode }) {
           )}
           {creating ? (
             <CreateCampaignForm
+              key={creationKey}
+              fresh
               lookups={lookups}
               prefix={prefix}
               onBack={() => setCreating(false)}

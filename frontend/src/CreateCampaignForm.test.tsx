@@ -289,3 +289,72 @@ it("uses options that arrive after opening the form when creating a campaign", a
     offer_id: 20,
   });
 });
+
+it("does not clear a newer saved creation when an unmounted older request confirms", async () => {
+  localStorage.setItem("adrobot.creation", JSON.stringify(pending));
+  let finish!: (value: Response) => void;
+  const fetch = vi.fn().mockReturnValue(
+    new Promise<Response>((resolve) => {
+      finish = resolve;
+    }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const form = render(
+    <CreateCampaignForm
+      lookups={lookups}
+      prefix="test_demo_"
+      onBack={vi.fn()}
+      onCreated={vi.fn()}
+    />,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /reconcile and resume/i }),
+  );
+  form.unmount();
+  const newer = {
+    ...pending,
+    name: "test_demo_new",
+    operation_id: "newer-operation-12345",
+  };
+  localStorage.setItem("adrobot.creation", JSON.stringify(newer));
+  finish(
+    new Response(JSON.stringify({ status: "confirmed", campaign_id: 81 })),
+  );
+  await waitFor(() =>
+    expect(
+      JSON.parse(localStorage.getItem("adrobot.creation")!).operation_id,
+    ).toBe(newer.operation_id),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(
+    JSON.parse(localStorage.getItem("adrobot.creation")!).operation_id,
+  ).toBe(newer.operation_id);
+});
+
+it("does not send a new creation when saving its recovery identity fails", async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  localStorage.setItem("adrobot.creation", JSON.stringify(pending));
+  render(
+    <CreateCampaignForm
+      lookups={lookups}
+      prefix="test_demo_"
+      onBack={vi.fn()}
+      onCreated={vi.fn()}
+    />,
+  );
+  const write = vi
+    .spyOn(Storage.prototype, "setItem")
+    .mockImplementation(() => {
+      throw new Error("Storage full");
+    });
+  fireEvent.click(
+    screen.getByRole("button", { name: /reconcile and resume/i }),
+  );
+  await screen.findByRole("alert");
+  expect(fetch).not.toHaveBeenCalled();
+  expect(
+    JSON.parse(localStorage.getItem("adrobot.creation")!).operation_id,
+  ).toBe(pending.operation_id);
+  write.mockRestore();
+});

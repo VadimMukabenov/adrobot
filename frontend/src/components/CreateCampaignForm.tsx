@@ -2,9 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { api, ApiError, createCampaign, errorText } from "../api";
 import type { Creation, Lookups, Offer, Operation } from "../types";
+import {
+  currentCreation,
+  savedCreations,
+  saveCreation,
+  forgetCreation,
+} from "../model/creationStorage";
 import { OfferSearch } from "./OfferSearch";
 
 type Props = {
+  fresh?: boolean;
   lookups: Lookups;
   prefix: string;
   onBack: () => void;
@@ -23,34 +30,21 @@ const phases: Record<string, string> = {
   complete: "Campaign confirmed.",
 };
 
-function savedCreation(): Creation | null {
-  try {
-    const value = JSON.parse(
-      localStorage.getItem("adrobot.creation") || "null",
-    );
-    if (
-      value &&
-      typeof value.name === "string" &&
-      typeof value.country === "string" &&
-      typeof value.operation_id === "string" &&
-      ["offer_id", "domain_id", "group_id", "traffic_source_id"].every((k) =>
-        Number.isInteger(value[k]),
-      )
-    )
-      return value;
-  } catch {
-    /* Ignore malformed local state; no request is sent. */
-  }
-  return null;
-}
-
 export function CreateCampaignForm({
+  fresh = false,
   lookups,
   prefix,
   onBack,
   onCreated,
 }: Props) {
-  const [saved] = useState(savedCreation);
+  const [saved] = useState(() => (fresh ? null : currentCreation()));
+  const [savedRequests, setSavedRequests] = useState<Creation[]>(() => {
+    try {
+      return savedCreations();
+    } catch {
+      return [];
+    }
+  });
   const [name, setName] = useState(saved?.name || prefix);
   const [country, setCountry] = useState(saved?.country || "AU");
   const [domain, setDomain] = useState(
@@ -95,6 +89,35 @@ export function CreateCampaignForm({
     );
     return () => clearInterval(timer);
   }, [busy]);
+  function selectRequest(value: Creation | null) {
+    try {
+      if (value) saveCreation(value);
+      setSavedRequests(savedCreations());
+      setRequest(value);
+      setName(value?.name || prefix);
+      setCountry(value?.country || "AU");
+      setDomain(String(value?.domain_id || lookups.domains[0]?.id || ""));
+      setGroup(String(value?.group_id || lookups.groups[0]?.id || ""));
+      setSource(
+        String(
+          value?.traffic_source_id || lookups.traffic_sources[0]?.id || "",
+        ),
+      );
+      setOffer(
+        value
+          ? {
+              id: value.offer_id,
+              name: `Offer ${value.offer_id}`,
+              state: "active",
+            }
+          : null,
+      );
+      setOperation(null);
+      setError("");
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
   async function submit() {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -114,13 +137,13 @@ export function CreateCampaignForm({
     setElapsed(0);
     // Retain operation identity if the tab is closed before the remote response arrives.
     try {
-      localStorage.setItem("adrobot.creation", JSON.stringify(payload));
+      saveCreation(payload);
       const result = await createCampaign(payload, (progress) => {
         if (mounted.current) setPhase(progress.phase);
       });
       setOperation(result);
       if (result.status === "confirmed" && result.campaign_id) {
-        localStorage.removeItem("adrobot.creation");
+        forgetCreation(payload.operation_id);
         if (mounted.current) onCreated(result.campaign_id);
       }
     } catch (e) {
@@ -135,7 +158,7 @@ export function CreateCampaignForm({
         } catch (lookupError) {
           if (lookupError instanceof ApiError && lookupError.status === 404) {
             setRequest(null);
-            localStorage.removeItem("adrobot.creation");
+            forgetCreation(payload.operation_id);
           }
         }
       }
@@ -156,6 +179,46 @@ export function CreateCampaignForm({
         Choose where visitors go: one country goes to Google; everyone else goes
         to your selected offer. Create campaign publishes this setup to Keitaro.
       </p>
+      {request && !busy && (
+        <div className="notice warning" role="note">
+          <strong>Resume previous creation: {request.name}</strong>
+          <p>
+            Settings are locked because this request may already exist in
+            Keitaro. Resume checks and continues the same operation without
+            creating a duplicate.
+          </p>
+          <button
+            type="button"
+            className="button"
+            onClick={() => selectRequest(null)}
+          >
+            Start a new campaign
+          </button>
+        </div>
+      )}
+      {!request && savedRequests.length > 0 && (
+        <details className="notice">
+          <summary>
+            Previous creations available to resume ({savedRequests.length})
+          </summary>
+          <p>
+            These requests may already exist in Keitaro. Resume one to check its
+            result.
+          </p>
+          {savedRequests.map((item) => (
+            <p key={item.operation_id}>
+              <button
+                type="button"
+                className="button"
+                onClick={() => selectRequest(item)}
+              >
+                Resume {item.name}
+              </button>{" "}
+              {item.country} · {item.operation_id}
+            </p>
+          ))}
+        </details>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();

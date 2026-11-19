@@ -168,7 +168,9 @@ it("ignores a mutation success after leaving and returning to the same campaign"
   await act(async () =>
     mutation.resolve(response({ ...campaign(1).streams[0], dirty: false })),
   );
-  expect(screen.getByRole("button", { name: "Publish to Keitaro" })).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "Publish to Keitaro" }),
+  ).toBeEnabled();
   expect(screen.getByText("Unpublished changes")).toBeInTheDocument();
   expect(
     screen.queryByText("Published and confirmed in Keitaro."),
@@ -231,7 +233,9 @@ it.each(["success", "failure"])(
         screen.queryByText("Published and confirmed in Keitaro."),
       ).not.toBeInTheDocument();
     } else {
-      expect(screen.getByRole("button", { name: "Check publication status" })).toBeEnabled();
+      expect(
+        screen.getByRole("button", { name: "Check publication status" }),
+      ).toBeEnabled();
       expect(screen.getByRole("alert")).toHaveTextContent("Response lost");
     }
     expect(
@@ -317,7 +321,9 @@ it("sends only one mutation when two events happen before controls re-render", a
     url === "/api/streams/10/push" ? mutation.promise : undefined,
   );
   render(<App />);
-  const push = await screen.findByRole("button", { name: "Publish to Keitaro" });
+  const push = await screen.findByRole("button", {
+    name: "Publish to Keitaro",
+  });
   act(() => {
     push.click();
     push.click();
@@ -428,6 +434,10 @@ it("keeps a newer index when an earlier reload finishes last", async () => {
   render(<App />);
   await screen.findByRole("heading", { name: "test_mukabenov_1" });
   fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+  fireEvent.click(screen.getByText(/Previous creations available/));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Resume test_mukabenov_new" }),
+  );
   fireEvent.click(screen.getByRole("button", { name: /Reconcile and resume/ }));
   fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
   await screen.findByRole("button", { name: "test_mukabenov_3" });
@@ -570,4 +580,41 @@ it("reads back an uncertain mutation without automatically repeating the write",
   expect(
     fetch.mock.calls.filter(([url]) => url === "/api/campaigns/1"),
   ).toHaveLength(2);
+});
+
+it("opens an editable new campaign while keeping a previous creation available to resume", async () => {
+  const pending = {
+    name: "test_mukabenov_interrupted",
+    country: "AU",
+    domain_id: 1,
+    group_id: 2,
+    traffic_source_id: 3,
+    offer_id: 1,
+    operation_id: "old-creation-12345",
+  };
+  localStorage.setItem("adrobot.creation", JSON.stringify(pending));
+  const fetch = serve();
+  render(<App />);
+  await screen.findByRole("heading", { name: "test_mukabenov_1" });
+  fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+  expect(screen.getByLabelText(/^Country code/)).toBeEnabled();
+  fireEvent.change(screen.getByLabelText(/^Country code/), {
+    target: { value: "DE" },
+  });
+  expect(screen.getByLabelText(/^Country code/)).toHaveValue("DE");
+  fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+  expect(screen.getByLabelText("Campaign name")).toHaveValue("test_mukabenov_");
+  fireEvent.click(screen.getByText(/Previous creations available/));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Resume test_mukabenov_interrupted" }),
+  );
+  expect(screen.getByLabelText(/^Country code/)).toHaveValue("AU");
+  expect(screen.getByLabelText(/^Country code/)).toBeDisabled();
+  expect(screen.getByText(/settings are locked/i)).toBeVisible();
+  expect(
+    JSON.parse(localStorage.getItem("adrobot.creation")!).operation_id,
+  ).toBe(pending.operation_id);
+  expect(
+    fetch.mock.calls.filter(([, options]) => options?.method === "POST"),
+  ).toHaveLength(0);
 });

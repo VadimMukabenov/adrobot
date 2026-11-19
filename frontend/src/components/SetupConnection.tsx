@@ -2,7 +2,21 @@ import { useEffect, useState } from "react";
 import { KeyRound } from "lucide-react";
 import { api, errorText } from "../api";
 
-export function SetupConnection({ onConnected }: { onConnected: () => void }) {
+export type AppMode = "live" | "demo";
+type Connection = {
+  configured: boolean;
+  url: string;
+  setup_token?: string;
+  mode?: string;
+};
+const connectionMode = (connection: Connection): AppMode =>
+  connection.mode === "demo" ? "demo" : "live";
+
+export function SetupConnection({
+  onConnected,
+}: {
+  onConnected: (mode: AppMode) => void;
+}) {
   const [url, setUrl] = useState("https://tlgk.host");
   const [key, setKey] = useState("");
   const [token, setToken] = useState("");
@@ -14,15 +28,12 @@ export function SetupConnection({ onConnected }: { onConnected: () => void }) {
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    api<{ configured: boolean; url: string; setup_token?: string }>(
-      "/connection",
-      {
-        signal: controller.signal,
-      },
-    )
+    api<Connection>("/connection", {
+      signal: controller.signal,
+    })
       .then((connection) => {
         if (controller.signal.aborted) return;
-        if (connection.configured) onConnected();
+        if (connection.configured) onConnected(connectionMode(connection));
         else {
           setUrl(connection.url);
           setToken(connection.setup_token || "");
@@ -42,13 +53,13 @@ export function SetupConnection({ onConnected }: { onConnected: () => void }) {
     setBusy(true);
     setError("");
     try {
-      await api("/connection", {
+      const connection = await api<Connection>("/connection", {
         method: "POST",
         headers: { "X-Setup-Token": token },
         body: JSON.stringify({ url, api_key: key }),
       });
       setKey("");
-      onConnected();
+      onConnected(connectionMode(connection));
     } catch (e) {
       setError(errorText(e));
     } finally {

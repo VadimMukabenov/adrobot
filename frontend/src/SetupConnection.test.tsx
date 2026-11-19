@@ -86,3 +86,24 @@ it("keeps the form usable after denied access and allows retry", async () => {
   expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+it("keeps a failed connection check behind setup and never falls back to demo", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(
+      response({ detail: "Connection check unavailable" }, 502),
+    );
+  vi.stubGlobal("fetch", fetch);
+  render(<App />);
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Connection check unavailable",
+  );
+  expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+  expect(
+    screen.queryByRole("note", { name: "Local demo mode" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("textbox", { name: "Search campaigns" }),
+  ).not.toBeInTheDocument();
+  expect(fetch).toHaveBeenCalledTimes(1);
+});

@@ -942,3 +942,12 @@ input:disabled {
     padding-top: 32px;
   }
 }
+
+.demo-banner {
+  padding: 12px clamp(16px, 4vw, 48px);
+  background: #fff4d6;
+  color: #614300;
+  border-bottom: 1px solid #e3c96e;
+  font-size: 14px;
+  line-height: 1.5;
+}

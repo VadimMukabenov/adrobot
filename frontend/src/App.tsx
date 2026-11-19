@@ -1,181 +1,52 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Globe2, Layers, RefreshCw, Route } from "lucide-react";
-import { api, ApiError, errorText, post } from "./api";
-import type {
-  Campaign,
-  CampaignSummary,
-  EditAction,
-  Lookups,
-  Stream,
-  StreamAction,
-} from "./types";
+import { useCallback, useState } from "react";
+import { Layers } from "lucide-react";
 import { CampaignList } from "./components/CampaignList";
 import { CreateCampaignForm } from "./components/CreateCampaignForm";
-import { StreamEditor } from "./components/StreamEditor";
-
-import { SetupConnection } from "./components/SetupConnection";
-
-const emptyLookups: Lookups = { domains: [], groups: [], traffic_sources: [] };
+import { CampaignWorkspace } from "./components/CampaignWorkspace";
+import { SetupConnection, type AppMode } from "./components/SetupConnection";
+import { useCampaignIndex } from "./model/useCampaignIndex";
+import { useCampaignEditor } from "./model/useCampaignEditor";
 
 export default function App() {
-  const [ready, setReady] = useState(false);
-  const connected = useCallback(() => setReady(true), []);
-  return ready ? <CampaignApp /> : <SetupConnection onConnected={connected} />;
+  const [mode, setMode] = useState<AppMode | null>(null);
+  const connected = useCallback((mode: AppMode) => setMode(mode), []);
+  return mode ? (
+    <CampaignApp mode={mode} />
+  ) : (
+    <SetupConnection onConnected={connected} />
+  );
 }
 
-function CampaignApp() {
-  const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
-  const [lookups, setLookups] = useState<Lookups>(emptyLookups);
-  const [prefix, setPrefix] = useState("test_mukabenov_");
-  const [query, setQuery] = useState("test_mukabenov_");
-  const [selected, setSelected] = useState<number | null>(null);
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
+function CampaignApp({ mode }: { mode: AppMode }) {
+  const index = useCampaignIndex();
+  const {
+    campaigns,
+    lookups,
+    prefix,
+    query,
+    setQuery,
+    selected,
+    setSelected,
+    loading,
+    loadIndex,
+    clearError,
+  } = index;
   const [creating, setCreating] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [busy, setBusy] = useState<Set<number>>(new Set());
-  const [error, setError] = useState("");
-  const [reload, setReload] = useState(0);
-  const [notice, setNotice] = useState("");
-  const selectionRef = useRef(selected);
-  selectionRef.current = selected;
-
-  const loadIndex = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    const [health, list, metadata] = await Promise.allSettled([
-      api<{ campaign_prefix: string }>("/health"),
-      api<CampaignSummary[]>("/campaigns"),
-      api<Lookups>("/lookups"),
-    ]);
-    const preferred =
-      health.status === "fulfilled"
-        ? health.value.campaign_prefix
-        : "test_mukabenov_";
-    setPrefix(preferred);
-    setQuery(preferred);
-    if (list.status === "fulfilled") {
-      setCampaigns(list.value);
-      setSelected(
-        (id) =>
-          id ??
-          list.value.find((c) => c.name.startsWith(preferred))?.id ??
-          null,
-      );
-    } else setError(errorText(list.reason));
-    if (metadata.status === "fulfilled") setLookups(metadata.value);
-    else setError(errorText(metadata.reason));
-    setLoading(false);
-  }, []);
-  useEffect(() => {
-    void loadIndex();
-  }, [loadIndex]);
-
-  useEffect(() => {
-    if (selected === null) {
-      setCampaign(null);
-      return;
-    }
-    const controller = new AbortController();
-    setCampaign(null);
-    setError("");
-    setNotice("");
-    (async () => {
-      try {
-        let data: Campaign;
-        try {
-          data = await api<Campaign>(`/campaigns/${selected}`, {
-            signal: controller.signal,
-          });
-        } catch (e) {
-          if (!(e instanceof ApiError) || e.status !== 404) throw e;
-          data = await post<Campaign>(`/campaigns/${selected}/fetch`);
-        }
-        if (!controller.signal.aborted) setCampaign(data);
-      } catch (e) {
-        if (!controller.signal.aborted) setError(errorText(e));
-      }
-    })();
-    return () => controller.abort();
-  }, [selected, reload]);
-
-  async function refresh() {
-    if (!campaign) return;
-    const id = campaign.id;
-    setRefreshing(true);
-    setError("");
-    setNotice("");
-    try {
-      const data = await post<Campaign>(`/campaigns/${id}/fetch`);
-      if (selectionRef.current === id) {
-        setCampaign(data);
-        setNotice("Refreshed from Keitaro.");
-      }
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setRefreshing(false);
-    }
-  }
-  async function mutate(
-    stream: Stream,
-    action: StreamAction | "edit",
-    edit?: object,
-  ) {
-    if (!campaign) return;
-    const id = campaign.id;
-    setBusy((previous) => new Set(previous).add(stream.id));
-    setError("");
-    setNotice("");
-    try {
-      const data = await post<Stream>(`/streams/${stream.id}/${action}`, {
-        expected_revision: stream.revision,
-        ...edit,
-      });
-      if (selectionRef.current === id) {
-        setCampaign(
-          (previous) =>
-            previous && {
-              ...previous,
-              streams: previous.streams.map((s) =>
-                s.id === data.id ? data : s,
-              ),
-            },
-        );
-        setNotice(
-          action === "push"
-            ? "Published and confirmed in Keitaro."
-            : action === "cancel"
-              ? "Local changes cancelled."
-              : action === "reconcile"
-                ? "Remote state checked."
-                : "Draft saved locally.",
-        );
-      }
-    } catch (e) {
-      setError(errorText(e));
-      try {
-        const data = await api<Campaign>(`/campaigns/${id}`);
-        if (selectionRef.current === id) setCampaign(data);
-      } catch {
-        /* Retain current view if reload also fails. */
-      }
-    } finally {
-      setBusy((previous) => {
-        const next = new Set(previous);
-        next.delete(stream.id);
-        return next;
-      });
-    }
-  }
-  const lookupName = (key: keyof Lookups, id: number) =>
-    lookups[key].find((x) => x.id === id)?.name || String(id);
+  const editor = useCampaignEditor(creating ? null : selected);
+  const { campaign, busy, refreshing, notice, refresh, mutate, retry } = editor;
+  const error = index.error || editor.error;
   return (
     <div className="app">
       <header className="app-header">
         <strong>Adrobot</strong>
         <span>Keitaro campaign editor</span>
       </header>
+      {mode === "demo" && (
+        <div className="demo-banner" role="note" aria-label="Local demo mode">
+          <strong>Local demo</strong> · Sample data stored on this server. No
+          changes are sent to external Keitaro.
+        </div>
+      )}
       <div className="app-layout">
         <CampaignList
           campaigns={campaigns}
@@ -189,20 +60,19 @@ function CampaignApp() {
           }}
           onCreate={() => {
             setCreating(true);
-            setError("");
-            setNotice("");
+            clearError();
           }}
         />
         <main className="main-content">
           {error && (
             <div role="alert" className="notice error">
               {error}
-              {!campaign && (
+              {(index.error || !campaign) && (
                 <button
                   className="text-button"
                   onClick={() => {
                     void loadIndex();
-                    setReload((value) => value + 1);
+                    retry();
                   }}
                 >
                   Retry
@@ -227,59 +97,15 @@ function CampaignApp() {
               }}
             />
           ) : campaign ? (
-            <>
-              <div className="campaign-header">
-                <h1>{campaign.name}</h1>
-                <button
-                  className="button outline refresh"
-                  disabled={refreshing || busy.size > 0}
-                  onClick={() => void refresh()}
-                >
-                  <RefreshCw size={18} className={refreshing ? "spin" : ""} />
-                  {refreshing ? "Refreshing…" : "Refresh from Keitaro"}
-                </button>
-              </div>
-              <div className="metadata">
-                <span>
-                  <Globe2 size={17} />
-                  Domain: {lookupName("domains", campaign.domain_id)}
-                </span>
-                <span>
-                  <Layers size={17} />
-                  Group: {lookupName("groups", campaign.group_id)}
-                </span>
-                <span>
-                  <Route size={17} />
-                  Source:{" "}
-                  {lookupName("traffic_sources", campaign.traffic_source_id)}
-                </span>
-              </div>
-              {!campaign.writable && (
-                <p className="notice warning">
-                  Read only. Writing is restricted to {prefix} campaigns.
-                </p>
-              )}
-              {campaign.streams.map((s, index) => (
-                <StreamEditor
-                  key={s.id}
-                  stream={s}
-                  index={index + 1}
-                  busy={busy.has(s.id) || refreshing}
-                  writable={campaign.writable}
-                  onEdit={(action: EditAction, offerId, share) =>
-                    void mutate(s, "edit", {
-                      action,
-                      offer_id: offerId,
-                      ...(share !== undefined ? { share } : {}),
-                    })
-                  }
-                  onAction={(action) => void mutate(s, action)}
-                />
-              ))}
-              {campaign.streams.length === 0 && (
-                <p className="muted">This campaign has no streams.</p>
-              )}
-            </>
+            <CampaignWorkspace
+              campaign={campaign}
+              lookups={lookups}
+              prefix={prefix}
+              busy={busy}
+              refreshing={refreshing}
+              refresh={refresh}
+              mutate={mutate}
+            />
           ) : (
             !error && (
               <div className="empty-state">

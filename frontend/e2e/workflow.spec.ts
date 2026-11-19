@@ -65,10 +65,15 @@ async function chooseOffer(
   addButton: string,
 ) {
   await scope
-    .getByRole("combobox", { name: "Search offers by ID or name" })
+    .getByRole("combobox", {
+      name:
+        addButton === "Select offer" ? "Offer" : "Search offers by ID or name",
+      exact: true,
+    })
     .fill(String(id));
   await scope.getByRole("option", { name: new RegExp(String(id)) }).click();
-  await scope.getByRole("button", { name: addButton, exact: true }).click();
+  if (addButton !== "Select offer")
+    await scope.getByRole("button", { name: addButton, exact: true }).click();
 }
 async function newCampaign(
   page: Page,
@@ -381,9 +386,10 @@ test("a lost create response resumes the same persisted operation without a seco
   await page.reload();
   await page.getByRole("button", { name: "New campaign", exact: true }).click();
   await expect(
-    page.getByLabel("Country code", { exact: false }),
+    page.getByRole("combobox", { name: "Country", exact: true }),
   ).toBeEditable();
-  await page.getByLabel("Country code", { exact: false }).fill("DE");
+  await page.getByRole("combobox", { name: "Country", exact: true }).fill("DE");
+  await page.getByRole("option", { name: "Германия (DE)" }).click();
   await page
     .getByLabel("Campaign name", { exact: true })
     .fill("test_mukabenov_e2e_new_after_interruption");
@@ -779,4 +785,73 @@ test("four-offer video acceptance cycle keeps pins, archives and remote state co
     (await catalog.json()).map((offer: { id: number }) => offer.id),
   ).toEqual([101, 102, 103, 104]);
   expect(errors).toEqual([]);
+});
+
+test("the creator browses all available offers and selects a named country with a fixed prefix", async ({
+  page,
+  request,
+}) => {
+  await open(page, request);
+  await page.getByRole("button", { name: "New campaign", exact: true }).click();
+  await expect(page.getByLabel("Campaign name", { exact: true })).toHaveValue(
+    "",
+  );
+  await expect(
+    page.getByText("test_mukabenov_", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Campaign name", { exact: true })
+    .fill("picker_acceptance");
+  const country = page.getByRole("combobox", { name: "Country", exact: true });
+  await country.fill("Нидер");
+  await page
+    .getByRole("option", { name: "Нидерланды (NL)", exact: true })
+    .click();
+  await expect(country).toHaveValue("Нидерланды (NL)");
+  const offer = page.getByRole("combobox", { name: "Offer", exact: true });
+  await offer.click();
+  await expect(
+    page
+      .getByRole("listbox", { name: "Offer", exact: true })
+      .getByRole("option"),
+  ).toHaveCount(4);
+  await page.getByRole("option", { name: /102.*Beta/ }).click();
+  await expect(offer).toHaveValue(/102.*Beta/);
+  // Selection keeps input focus; another click must still reopen the list.
+  await offer.click();
+  await expect(
+    page.getByRole("listbox", { name: "Offer", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("option", { name: /102.*Beta/ }).click();
+  await country.click();
+  await country.press("Tab");
+  await expect(
+    page.getByRole("combobox", { name: "Domain", exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Select offer", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Create campaign", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "test_mukabenov_picker_acceptance",
+      exact: true,
+    }),
+  ).toBeVisible();
+  const state = await remote(request);
+  const campaign = state.campaigns.find(
+    (c) => c.name === "test_mukabenov_picker_acceptance",
+  )!;
+  expect(campaign.state).toBe("active");
+  const streams = state.streams
+    .filter((s) => s.campaign_id === campaign.id)
+    .sort((a, b) => a.position - b.position);
+  expect(streams[0].filters).toEqual([
+    { name: "country", mode: "accept", payload: ["NL"] },
+  ]);
+  expect(streams[1].offers).toEqual([
+    { offer_id: 102, share: 100, state: "active" },
+  ]);
 });

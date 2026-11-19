@@ -8,7 +8,7 @@ import {
   saveCreation,
   forgetCreation,
 } from "../model/creationStorage";
-import { OfferSearch } from "./OfferSearch";
+import { CountryPicker, OfferPicker } from "./CampaignPickers";
 
 type Props = {
   fresh?: boolean;
@@ -226,35 +226,47 @@ export function CreateCampaignForm({
         }}
         className="create-form"
       >
-        <label>
-          Campaign name
-          <input
-            required
-            value={name}
-            disabled={locked}
-            minLength={prefix.length + 1}
-            aria-describedby="campaign-name-help"
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
+        <div>
+          <label className="field-label" htmlFor="campaign-name">
+            Campaign name
+          </label>
+          <div className="campaign-name-input">
+            <span aria-hidden="true">{prefix}</span>
+            <input
+              id="campaign-name"
+              aria-label="Campaign name"
+              required
+              value={name.startsWith(prefix) ? name.slice(prefix.length) : name}
+              disabled={locked}
+              minLength={1}
+              aria-describedby="campaign-name-help"
+              placeholder="campaign1"
+              onChange={(e) =>
+                setName(
+                  prefix +
+                    (e.target.value.startsWith(prefix)
+                      ? e.target.value.slice(prefix.length)
+                      : e.target.value),
+                )
+              }
+            />
+          </div>
+        </div>
         <small id="campaign-name-help">
-          Add a name after {prefix}, for example {prefix}demo.
+          The prefix is fixed. Enter a campaign name, for example demo.
         </small>
-        <label>
-          Country code
-          <input
-            required
+        <div>
+          <span className="field-label">Country</span>
+          <CountryPicker
             value={country}
             disabled={locked}
-            maxLength={2}
-            pattern="[A-Z]{2}"
-            onChange={(e) => setCountry(e.target.value.toUpperCase())}
+            onChange={setCountry}
           />
           <small>
-            Visitors from this country go to Google: AU = Australia, DE =
-            Germany, CA = Canada.
+            Visitors from this country go to Google. Search by name or country
+            code.
           </small>
-        </label>
+        </div>
         <div className="form-grid">
           <label>
             Domain
@@ -311,19 +323,10 @@ export function CreateCampaignForm({
         <div>
           <span className="field-label">Offer</span>
           <p className="stream-help">
-            The destination page for visitors outside the selected country.
-            Search, then click Select offer.
+            The destination page for visitors outside the selected country. Open
+            the list to choose an available offer, or search by name or ID.
           </p>
-          <OfferSearch
-            disabled={locked}
-            label="Select offer"
-            onSelect={setOffer}
-          />
-          {offer && (
-            <p className="selected-offer">
-              {offer.id} · {offer.name}
-            </p>
-          )}
+          <OfferPicker disabled={locked} value={offer} onChange={setOffer} />
         </div>
         <div className="create-preview">
           <strong>Campaign routing</strong>
@@ -371,6 +374,7 @@ export function CreateCampaignForm({
           className="button primary"
           disabled={
             busy ||
+            (!request && (!country || !name.slice(prefix.length).trim())) ||
             !offer ||
             !selectedDomain ||
             !selectedGroup ||

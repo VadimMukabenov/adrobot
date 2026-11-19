@@ -89,7 +89,7 @@ it("recovers the same unfinished creation after a page reload without auto publi
       onCreated={vi.fn()}
     />,
   );
-  expect(screen.getByLabelText("Campaign name")).toHaveValue("test_demo_saved");
+  expect(screen.getByLabelText("Campaign name")).toHaveValue("saved");
   expect(
     screen.getByRole("button", { name: /reconcile and resume/i }),
   ).toBeEnabled();
@@ -270,12 +270,10 @@ it("uses options that arrive after opening the form when creating a campaign", a
     target: { value: "test_demo_launch" },
   });
   rerender(<CreateCampaignForm {...props} lookups={lookups} />);
-  fireEvent.change(
-    screen.getByRole("combobox", { name: "Search offers by ID or name" }),
-    { target: { value: "20" } },
-  );
+  fireEvent.change(screen.getByRole("combobox", { name: "Offer" }), {
+    target: { value: "20" },
+  });
   fireEvent.click(await screen.findByRole("option", { name: /Demo offer/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Select offer" }));
   const create = screen.getByRole("button", { name: "Create campaign" });
   expect(create).toBeEnabled();
   fireEvent.click(create);

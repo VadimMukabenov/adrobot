@@ -598,6 +598,47 @@ input:disabled {
 .create-form .offer-search {
   margin-bottom: 5px;
 }
+.campaign-name-input {
+  display: flex;
+  align-items: stretch;
+}
+.campaign-name-input > span {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: #f1f5fb;
+  border: 1px solid #b8c2d2;
+  border-right: 0;
+  border-radius: 5px 0 0 5px;
+  font-weight: 400;
+  font-size: 14px;
+}
+.campaign-name-input > input {
+  min-width: 0;
+  border-radius: 0 5px 5px 0;
+}
+.campaign-picker {
+  position: relative;
+}
+.picker-input {
+  position: relative;
+}
+.picker-input > input {
+  padding-right: 34px;
+}
+.picker-input > svg {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #657087;
+}
+.campaign-picker + small {
+  display: block;
+  color: #737d90;
+  margin-top: 7px;
+}
 .selected-offer {
   font-size: 13px;
   color: #3e587c;

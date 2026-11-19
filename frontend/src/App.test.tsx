@@ -542,7 +542,7 @@ it("keeps failed metadata recoverable after opening the creation form", async ()
   expect(screen.getByRole("combobox", { name: "Traffic source" })).toHaveValue(
     "3",
   );
-  expect(name).toHaveValue("test_mukabenov_recovery");
+  expect(name).toHaveValue("recovery");
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(
     screen.queryByText(/Waiting for campaign options/),
@@ -597,19 +597,24 @@ it("opens an editable new campaign while keeping a previous creation available t
   render(<App />);
   await screen.findByRole("heading", { name: "test_mukabenov_1" });
   fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
-  expect(screen.getByLabelText(/^Country code/)).toBeEnabled();
-  fireEvent.change(screen.getByLabelText(/^Country code/), {
+  expect(screen.getByRole("combobox", { name: "Country" })).toBeEnabled();
+  fireEvent.change(screen.getByRole("combobox", { name: "Country" }), {
     target: { value: "DE" },
   });
-  expect(screen.getByLabelText(/^Country code/)).toHaveValue("DE");
+  fireEvent.click(screen.getByRole("option", { name: "Германия (DE)" }));
+  expect(screen.getByRole("combobox", { name: "Country" })).toHaveValue(
+    "Германия (DE)",
+  );
   fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
-  expect(screen.getByLabelText("Campaign name")).toHaveValue("test_mukabenov_");
+  expect(screen.getByLabelText("Campaign name")).toHaveValue("");
   fireEvent.click(screen.getByText(/Previous creations available/));
   fireEvent.click(
     screen.getByRole("button", { name: "Resume test_mukabenov_interrupted" }),
   );
-  expect(screen.getByLabelText(/^Country code/)).toHaveValue("AU");
-  expect(screen.getByLabelText(/^Country code/)).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: "Country" })).toHaveValue(
+    "Австралия (AU)",
+  );
+  expect(screen.getByRole("combobox", { name: "Country" })).toBeDisabled();
   expect(screen.getByText(/settings are locked/i)).toBeVisible();
   expect(
     JSON.parse(localStorage.getItem("adrobot.creation")!).operation_id,

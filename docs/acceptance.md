@@ -54,7 +54,12 @@ Install the prerequisites described in [Development](development.md), then:
 
 The browser suite includes the complete four-offer cycle plus external conflicts,
 lost write responses, reconciliation, persistence and creation recovery. Tests
-use fresh temporary databases and loopback ports 18781/18782. To use installed
+also check the creator's fixed name prefix, country search by name or ISO code,
+and selecting an offer from the available catalog without knowing its ID. The
+country picker searches Russian and English names; the submitted value remains
+the ISO code required by Keitaro.
+
+Tests use fresh temporary databases and loopback ports 18781/18782. To use installed
 Chrome locally, set `ADROBOT_E2E_BROWSER_CHANNEL=chrome` for `npm run test:e2e`.
 
 Passing this fixture proves the application workflow under the modeled API

@@ -1,0 +1,33 @@
+name: adrobot-emulator
+services:
+  app:
+    image: ${ADROBOT_IMAGE:-adrobot:emulator-local}
+    build: .
+    ports:
+      - "127.0.0.1:${ADROBOT_EMULATOR_PORT:-8767}:8765"
+    environment:
+      APP_MODE: emulator
+      CAMPAIGN_PREFIX: test_mukabenov_
+      EMULATOR_DATABASE_URL: sqlite:////data/adrobot.db
+      EMULATOR_API_URL: http://keitaro:8765
+      EMULATOR_PUBLIC_URL: http://127.0.0.1:${ADROBOT_EMULATOR_TRACKER_PORT:-8768}
+    volumes:
+      - emulator-app-data:/data
+    depends_on:
+      keitaro:
+        condition: service_healthy
+    init: true
+  keitaro:
+    image: ${ADROBOT_IMAGE:-adrobot:emulator-local}
+    pull_policy: never
+    command: [".venv/bin/uvicorn", "adrobot.emulator:create_emulator", "--factory", "--host", "0.0.0.0", "--port", "8765"]
+    ports:
+      - "127.0.0.1:${ADROBOT_EMULATOR_TRACKER_PORT:-8768}:8765"
+    environment:
+      EMULATOR_RESOURCES_DATABASE_URL: sqlite:////data/keitaro.db
+    volumes:
+      - emulator-tracker-data:/data
+    init: true
+volumes:
+  emulator-app-data:
+  emulator-tracker-data:

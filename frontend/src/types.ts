@@ -1,3 +1,4 @@
+export type AppMode = "live" | "demo" | "emulator";
 export type Offer = { id: number; name: string; state: string };
 export type Link = {
   offer_id: number;

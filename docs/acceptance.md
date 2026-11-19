@@ -43,6 +43,14 @@ requires correct totals and pin preservation, but does not specify a tie-break.
 A few visitor clicks cannot establish an exact traffic ratio; compare the
 configured remote shares first.
 
+## Manual four-offer acceptance
+
+From a fresh clone with Docker/Compose installed, run `./start --emulator` or
+`./start --emulator --image`. Open http://127.0.0.1:8767/ and follow the table above.
+No separate development dependencies, API key or test harness setup is needed.
+The country selector in **Open as visitor** explicitly simulates the selected
+country; actual VPN/GeoIP acceptance remains a live Keitaro check.
+
 ## Repeat automated acceptance
 
 Install the prerequisites described in [Development](development.md), then:

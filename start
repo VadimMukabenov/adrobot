@@ -5,9 +5,14 @@ app_mode=live
 ready_image=false
 for argument in "$@"; do
   case "$argument" in
-    --demo) app_mode=demo ;;
+    --demo|--emulator)
+      requested_mode="${argument#--}"
+      if [ "$app_mode" != live ] && [ "$app_mode" != "$requested_mode" ]; then
+        fail 'Choose one mode: --demo or --emulator.'
+      fi
+      app_mode="$requested_mode" ;;
     --image) ready_image=true ;;
-    --help) printf 'Usage: %s [--demo] [--image]\n' "$0"; exit 0 ;;
+    --help) printf 'Usage: %s [--demo | --emulator] [--image]\n' "$0"; exit 0 ;;
     *) fail "Unknown option: $argument. Use --help." ;;
   esac
 done
@@ -15,12 +20,18 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 test -f compose.yaml || fail 'The start script must stay inside the Adrobot clone.'
 compose=(docker compose)
 startup=(up --build --wait)
-if [ "$app_mode" = demo ] || [ "$ready_image" = true ]; then
+if [ "$app_mode" != live ] || [ "$ready_image" = true ]; then
   # Explicit isolated modes never import an operator's live dotenv or exported key.
   unset KEITARO_API_KEY KEITARO_BASE_URL DATABASE_URL DEMO_DATABASE_URL CONNECTION_FILE
   compose+=(--env-file /dev/null)
 fi
-if [ "$ready_image" = true ]; then
+if [ "$app_mode" = emulator ]; then
+  compose+=(-p adrobot-emulator -f compose.emulator.yaml)
+  if [ "$ready_image" = true ]; then
+    compose+=(-f compose.emulator.release.yaml)
+    startup=(up --pull always --wait)
+  fi
+elif [ "$ready_image" = true ]; then
   export APP_MODE="$app_mode"
   if [ "$app_mode" = demo ]; then export ADROBOT_PORT="${ADROBOT_PORT:-${ADROBOT_DEMO_PORT:-8766}}"; fi
   compose+=(-p "adrobot-release-$app_mode" -f compose.release.yaml)
@@ -34,7 +45,10 @@ docker info >/dev/null 2>&1 || fail 'Start Docker and allow this OS user to acce
 "${compose[@]}" "${startup[@]}"
 address=$("${compose[@]}" port app 8765)
 printf '\nOpen Adrobot: http://%s/\n' "$address"
-if [ "$app_mode" = demo ]; then
+if [ "$app_mode" = emulator ]; then
+  printf 'Keitaro emulator: four sample offers, separate persistent data; no real key needed.\n'
+  printf 'Use Open as visitor in a campaign to choose a simulated visitor country.\n'
+elif [ "$app_mode" = demo ]; then
   printf 'Demo data is local. No Keitaro key is needed.\n'
 else
   printf 'Connect to Keitaro on that page.\n'

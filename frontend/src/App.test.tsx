@@ -392,6 +392,29 @@ it("labels configured demo mode without opening credential setup", async () => {
   expect(screen.queryByLabelText("Admin API key")).not.toBeInTheDocument();
 });
 
+it("labels the configured HTTP emulator without credential setup or a demo banner", async () => {
+  serve((url) =>
+    url === "/api/connection"
+      ? Promise.resolve(
+          response({
+            configured: true,
+            url: "http://127.0.0.1:8768",
+            mode: "emulator",
+          }),
+        )
+      : undefined,
+  );
+  render(<App />);
+  await screen.findByRole("heading", { name: "test_mukabenov_1" });
+  expect(
+    screen.getByRole("note", { name: "Local HTTP emulator mode" }),
+  ).toHaveTextContent(/HTTP.*local tracker/i);
+  expect(
+    screen.queryByRole("note", { name: "Local demo mode" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Admin API key")).not.toBeInTheDocument();
+});
+
 it("keeps a newer index when an earlier reload finishes last", async () => {
   localStorage.setItem(
     "adrobot.creation",

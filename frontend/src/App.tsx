@@ -3,9 +3,10 @@ import { Layers } from "lucide-react";
 import { CampaignList } from "./components/CampaignList";
 import { CreateCampaignForm } from "./components/CreateCampaignForm";
 import { CampaignWorkspace } from "./components/CampaignWorkspace";
-import { SetupConnection, type AppMode } from "./components/SetupConnection";
+import { SetupConnection } from "./components/SetupConnection";
 import { useCampaignIndex } from "./model/useCampaignIndex";
 import { useCampaignEditor } from "./model/useCampaignEditor";
+import type { AppMode } from "./types";
 
 export default function App() {
   const [mode, setMode] = useState<AppMode | null>(null);
@@ -52,6 +53,17 @@ function CampaignApp({ mode }: { mode: AppMode }) {
         <div className="demo-banner" role="note" aria-label="Local demo mode">
           <strong>Local demo</strong> · Sample data stored on this server. No
           changes are sent to external Keitaro.
+        </div>
+      )}
+      {mode === "emulator" && (
+        <div
+          className="demo-banner"
+          role="note"
+          aria-label="Local HTTP emulator mode"
+        >
+          <strong>Local HTTP emulator</strong> · Changes use the local tracker
+          over HTTP. Sample data is separate from live Keitaro; no real key is
+          needed.
         </div>
       )}
       <div className="app-layout">
@@ -107,6 +119,7 @@ function CampaignApp({ mode }: { mode: AppMode }) {
             />
           ) : campaign ? (
             <CampaignWorkspace
+              emulator={mode === "emulator"}
               campaign={{
                 ...campaign,
                 visitor_url: visitorSource?.visitor_url,

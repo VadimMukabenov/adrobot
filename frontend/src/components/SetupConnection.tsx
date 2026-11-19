@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { KeyRound } from "lucide-react";
 import { api, errorText } from "../api";
+import type { AppMode } from "../types";
 
-export type AppMode = "live" | "demo";
 type Connection = {
   configured: boolean;
   url: string;
@@ -10,7 +10,9 @@ type Connection = {
   mode?: string;
 };
 const connectionMode = (connection: Connection): AppMode =>
-  connection.mode === "demo" ? "demo" : "live";
+  connection.mode === "demo" || connection.mode === "emulator"
+    ? connection.mode
+    : "live";
 
 export function SetupConnection({
   onConnected,

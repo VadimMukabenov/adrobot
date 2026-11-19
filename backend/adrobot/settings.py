@@ -11,8 +11,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[2] / ".env", extra="ignore"
     )
-    app_mode: Literal["live", "demo"] = "live"
+    app_mode: Literal["live", "demo", "emulator"] = "live"
     demo_database_url: str | None = None
+    emulator_api_url: str = "http://keitaro:8765"
+    emulator_public_url: str = "http://127.0.0.1:8768"
     database_url: str = "sqlite:///./adrobot.db"
     keitaro_base_url: str = "https://tlgk.host"
     keitaro_api_key: SecretStr = SecretStr("")
@@ -29,6 +31,17 @@ class Settings(BaseSettings):
             values["keitaro_api_key"] = ""
             if "database_url" not in values and "database_url" not in environment:
                 values["database_url"] = "sqlite:///./adrobot-demo.db"
+        elif selected_mode == "emulator":
+            # Emulator startup has its own HTTP tracker, credentials and draft storage.
+            # Discard live inputs before validation can use or include them in errors.
+            values["_env_file"] = None
+            values["keitaro_api_key"] = ""
+            values["keitaro_base_url"] = type(self).model_fields["keitaro_base_url"].default
+            values["connection_file"] = None
+            if "database_url" not in values:
+                values["database_url"] = environment.get(
+                    "emulator_database_url", "sqlite:///./adrobot-emulator.db"
+                )
         super().__init__(**values)
 
     @classmethod
@@ -38,11 +51,14 @@ class Settings(BaseSettings):
         def live_dotenv():
             values = dotenv_settings()
             selected_mode = init_settings().get("app_mode", env_settings().get("app_mode"))
-            if values.get("app_mode") == "demo" and selected_mode not in ("live", "demo"):
+            mode = values.get("app_mode")
+            if mode in ("demo", "emulator") and selected_mode not in (
+                "live", "demo", "emulator"
+            ):
                 # Reject before these values enter model validation: errors can include inputs.
                 raise ValueError(
-                    "Select demo with process APP_MODE=demo or Settings(app_mode='demo'); "
-                    "dotenv cannot select demo mode."
+                    f"Select {mode} with process APP_MODE={mode} or Settings(app_mode='{mode}'); "
+                    f"dotenv cannot select {mode} mode."
                 )
             return values
 

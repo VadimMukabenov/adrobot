@@ -32,6 +32,45 @@ APP_MODE=demo docker compose --env-file /dev/null -p adrobot-release-demo -f ~/a
 This is a separate volume from source-built demo. Live reset is destructive to local live drafts/connection;
 make a backup before using `down --volumes`.
 
+## Reviewer HTTP emulator
+
+```bash
+~/adrobot/start --emulator
+# Or pull the published image:
+~/adrobot/start --emulator --image
+```
+
+Open **http://127.0.0.1:8767/**. The emulator banner is always visible. This starts
+the normal React/FastAPI/SQLAlchemy app and a separate HTTP simulator implementing
+the subset of Keitaro Admin API used by this assignment. It seeds four offers and
+a campaign with three offers. No live key, saved connection or `.env` is imported.
+Application drafts and remote simulator resources use separate persistent Docker
+volumes in the `adrobot-emulator` project. Repeating either emulator command keeps
+both; returning to `~/adrobot/start` keeps the real connection at port 8765.
+
+1. Open the seeded campaign and add the fourth sample offer: each gets 25%.
+2. Set a weight, pin it, remove/restore offers, Publish and reload.
+3. Use **Open as visitor**, select a country and submit. Matching country opens
+   Google; other countries open distinct sample destinations sampled from the
+   published weights. This choice simulates geography; VPN/IP is not inspected.
+   A handful of visits cannot prove an exact statistical split.
+
+The tracker public endpoint is **http://127.0.0.1:8768/**. Both ports are loopback
+only; use this computer's browser. `ADROBOT_EMULATOR_PORT` and
+`ADROBOT_EMULATOR_TRACKER_PORT` override the ports together with the generated
+visitor links. To pin an image, set `ADROBOT_IMAGE` to an immutable published tag.
+
+To delete only emulator data and start fresh:
+
+```bash
+docker compose --env-file /dev/null -p adrobot-emulator -f ~/adrobot/compose.emulator.yaml down --volumes
+~/adrobot/start --emulator
+```
+
+The older `--demo` mode uses in-process sample resources at 8766; it remains
+available for UI exploration. Use `--emulator` for reviewer checks through the
+real HTTP integration path. Neither mode is a fallback after live errors.
+
 # Using Adrobot
 
 A FastAPI + SQLAlchemy + React editor for Keitaro campaigns. Create two-stream campaigns, edit offer allocations locally, and publish only when ready.

@@ -57,6 +57,12 @@ class Connection:
             self.url = "local://demo"
             self.gateway = DemoGateway(settings.demo_database_url, settings.campaign_prefix)
             return
+        if self.mode == "emulator":
+            from .emulator import EMULATOR_KEY
+
+            self.url = settings.emulator_public_url
+            self.gateway = KeitaroGateway(settings.emulator_api_url, EMULATOR_KEY)
+            return
         database = make_url(settings.database_url).database
         self.path = settings.connection_file or (
             Path(database).resolve().parent / "keitaro.json"

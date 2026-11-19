@@ -10,6 +10,7 @@ import { VisitorLink } from "./VisitorLink";
 import { StreamEditor } from "./StreamEditor";
 
 type Props = {
+  emulator?: boolean;
   campaign: Campaign;
   lookups: Lookups;
   prefix: string;
@@ -24,6 +25,7 @@ type Props = {
 };
 
 export function CampaignWorkspace({
+  emulator = false,
   campaign,
   lookups,
   prefix,
@@ -62,7 +64,11 @@ export function CampaignWorkspace({
         </span>
       </div>
       {campaign.visitor_url && (
-        <VisitorLink key={campaign.visitor_url} url={campaign.visitor_url} />
+        <VisitorLink
+          key={campaign.visitor_url}
+          url={campaign.visitor_url}
+          emulator={emulator}
+        />
       )}
       <aside className="workflow-guide" aria-label="How to use this editor">
         <strong>Edit offer traffic in three steps</strong>

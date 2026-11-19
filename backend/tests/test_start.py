@@ -128,3 +128,60 @@ def test_ready_image_launcher_pulls_without_building_and_isolates_ambient_projec
     if mode == "demo":
         assert "port=8766" in calls
     assert "http://127.0.0.1:8766/" in result.stdout
+
+
+@pytest.mark.parametrize("image", [False, True])
+def test_http_emulator_launcher_is_explicit_and_never_imports_live_state(tmp_path, image):
+    repo = tmp_path / "reviewer clone"
+    repo.mkdir()
+    shutil.copy2(Path(__file__).resolve().parents[2] / "start", repo / "start")
+    (repo / "compose.yaml").write_text("services: {}\n")
+    original = "KEITARO_API_KEY=dotenv-live-marker\nDATABASE_URL=sqlite:///live.db\n"
+    (repo / ".env").write_text(original)
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    log = tmp_path / "calls"
+    docker = tools / "docker"
+    docker.write_text(
+        '#!/bin/sh\nprintf "%s|key=%s|db=%s\\n" "$*" '
+        '"${KEITARO_API_KEY-unset}" "${DATABASE_URL-unset}" >> "$QA_DOCKER_LOG"\n'
+        'case "$*" in *"port app 8765") echo 127.0.0.1:8767;; esac\n'
+    )
+    docker.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(repo / "start"), "--emulator", *(["--image"] if image else [])],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        input="",
+        env={
+            **os.environ,
+            "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+            "QA_DOCKER_LOG": str(log),
+            "KEITARO_API_KEY": "ambient-live-marker",
+            "DATABASE_URL": "sqlite:///live.db",
+            "COMPOSE_PROJECT_NAME": "adrobot",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    calls = log.read_text()
+    assert "--env-file /dev/null -p adrobot-emulator -f compose.emulator.yaml" in calls
+    assert "key=unset|db=unset" in calls
+    assert "http://127.0.0.1:8767/" in result.stdout
+    assert "emulator" in result.stdout.lower()
+    assert "Connect to Keitaro" not in result.stdout
+    assert (repo / ".env").read_text() == original
+    if image:
+        assert "-f compose.emulator.release.yaml up --pull always --wait" in calls
+        assert "--build" not in calls
+    else:
+        assert "up --build --wait" in calls
+
+
+def test_conflicting_modes_do_not_silently_select_the_last_flag():
+    script = Path(__file__).resolve().parents[2] / "start"
+    result = subprocess.run(
+        ["bash", str(script), "--demo", "--emulator"], capture_output=True, text=True
+    )
+    assert result.returncode != 0
+    assert "one mode" in result.stderr.lower()

@@ -1,12 +1,22 @@
 import { useState } from "react";
 import { Copy, ExternalLink } from "lucide-react";
 
-export function VisitorLink({ url }: { url: string }) {
+export function VisitorLink({
+  url,
+  emulator = false,
+}: {
+  url: string;
+  emulator?: boolean;
+}) {
   const [message, setMessage] = useState("");
   async function copy() {
     try {
       await navigator.clipboard.writeText(url);
-      setMessage("Link copied. Open it on your phone or share it for testing.");
+      setMessage(
+        emulator
+          ? "Link copied. Open it on this computer and select a visitor country."
+          : "Link copied. Open it on your phone or share it for testing.",
+      );
     } catch {
       setMessage(
         "Could not copy automatically. Select and copy the link above.",
@@ -17,8 +27,9 @@ export function VisitorLink({ url }: { url: string }) {
     <section className="visitor-preview" aria-label="Preview as a visitor">
       <h2>Preview as a visitor</h2>
       <p>
-        Open this link on your phone to see where someone who clicked your ad
-        lands. Your country or VPN determines which page opens.
+        {emulator
+          ? "Open the local preview and choose a visitor country. The emulator uses that choice, not your IP or VPN."
+          : "Open this link on your phone to see where someone who clicked your ad lands. Your country or VPN determines which page opens."}
       </p>
       <div className="visitor-link-controls">
         <input
@@ -45,9 +56,9 @@ export function VisitorLink({ url }: { url: string }) {
       </div>
       {message && <p role="status">{message}</p>}
       <small>
-        Test link uses your connected Keitaro address. Visits appear in campaign
-        statistics. Your selected campaign domain must also work before you
-        launch ads.
+        {emulator
+          ? "Emulator links work on this computer. Sample destinations use the published weights; no real ads or leads are sent."
+          : "Test link uses your connected Keitaro address. Visits appear in campaign statistics. Your selected campaign domain must also work before you launch ads."}
       </small>
     </section>
   );

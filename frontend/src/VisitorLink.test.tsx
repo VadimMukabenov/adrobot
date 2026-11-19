@@ -31,3 +31,13 @@ it("keeps the address selectable when automatic copying fails", async () => {
   );
   expect(screen.getByLabelText("Visitor link")).toHaveAttribute("readonly");
 });
+
+it("explains simulated country selection instead of phone or VPN use in emulator mode", async () => {
+  const copy = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { clipboard: { writeText: copy } });
+  render(<VisitorLink url="http://127.0.0.1:8768/sample" emulator />);
+  expect(screen.getByText(/choose a visitor country/i)).toBeVisible();
+  expect(screen.queryByText(/your country or VPN/i)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("this computer");
+});

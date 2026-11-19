@@ -3,39 +3,44 @@
 Create Keitaro campaigns and edit offer weights with persistent drafts,
 Cancel and explicit publishing. FastAPI · SQLAlchemy · React.
 
-## Try the demo
+## Start
 
-Requires **Git and Docker with Compose v2.24+**. Paste from **any directory**:
-
-```bash
-git clone https://github.com/VadimMukabenov/adrobot ~/adrobot && ~/adrobot/start --demo
-```
-
-Open **http://127.0.0.1:8766/**. No key is needed. Sample campaigns and edits stay
-on your machine; the demo uses separate data from your real Keitaro connection.
-
-Already cloned? Update and start:
+Requires **Git and Docker with Compose v2.24+**. From any directory:
 
 ```bash
-git -C ~/adrobot pull --ff-only && ~/adrobot/start --demo
+git clone https://github.com/VadimMukabenov/adrobot ~/adrobot && ~/adrobot/start
 ```
 
-To use the published image without building locally:
+Open **http://127.0.0.1:8765/** and connect using the real Keitaro Admin API key
+([setup below](#connect-to-real-keitaro)). Existing connection and drafts are kept.
+
+To test the full editor with four offers, select the **HTTP Keitaro emulator**:
 
 ```bash
-~/adrobot/start --demo --image
+~/adrobot/start --emulator
 ```
+
+Open **http://127.0.0.1:8767/**. No key or configuration is needed. The same
+application talks over HTTP to a separate local tracker. Both databases persist
+in their own volumes; real Keitaro and its connection stay separate.
+**Open as visitor** lets you select a simulated country and open Google or a
+sample offer using the published weights. VPN/real GeoIP is not simulated.
+
+Add `--image` to either command to pull the published image without a local build,
+for example `~/adrobot/start --emulator --image`. Repeat a command to resume that
+mode; both can run together. Update an existing clone with `git -C ~/adrobot pull --ff-only`.
 
 ## Use the editor
 
 1. Choose a campaign, or **New campaign**: selected country → Google, other visitors → an offer (destination page).
-2. **Open as visitor** previews the campaign; **Copy link** lets you test it on your phone. Your country/VPN determines the destination.
+2. **Open as visitor** previews the campaign; **Copy link** lets you test real Keitaro on your phone with VPN. In the emulator, select a country in the local preview.
 3. Add offers and set traffic percentages. **Pin** keeps a percentage fixed; the rest is shared equally.
 4. **Publish to Keitaro** applies the draft. **Discard draft** undoes local edits; **Remove** never deletes the global offer.
 
-**Acceptance:** the four-offer workflow is checked against an isolated HTTP tracker.
-The shared live account currently exposes one offer; live multi-offer validation
-needs additional accessible offers. [Scenarios and how to repeat them](docs/acceptance.md).
+**Acceptance:** creation and country routing were checked with the supplied live
+account, which exposed one offer during verification. The four-offer editor cycle
+is checked against the HTTP emulator; live multi-offer validation needs additional
+accessible offers. [Scenarios and how to repeat them](docs/acceptance.md).
 
 ## Connect to real Keitaro
 

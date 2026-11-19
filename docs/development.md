@@ -93,6 +93,8 @@ external conflicts, an accepted PUT with a lost response and a failed read-back,
 and a lost creation response resumed with the same operation identity.
 
 GitHub Actions runs backend tests/lint, fresh migrations/schema checks, frontend
-tests/types/build, the browser suite and an isolated Docker demo smoke. Only a
+tests/types/build, the browser suite, and isolated Docker checks for demo and
+HTTP emulator modes. The emulator check publishes four offers, verifies routing,
+and recreates both containers to check draft and tracker persistence. Only a
 successful main-branch run publishes its smoke-tested image. Browser failure
 traces and screenshots are retained as CI artifacts.

@@ -32,7 +32,7 @@ jobs:
       - name: Test backend
         run: uv run --frozen pytest
       - name: Lint backend
-        run: uv run --frozen ruff check --config pyproject.toml adrobot tests ../frontend/e2e/serve.py
+        run: uv run --frozen ruff check --config pyproject.toml adrobot tests ../frontend/e2e/serve.py ../scripts/check_emulator.py
       - name: Migrate an empty database and verify schema
         env:
           DATABASE_URL: sqlite:///${{ runner.temp }}/migration-check.db
@@ -103,7 +103,7 @@ jobs:
           retention-days: 7
 
   docker-smoke:
-    name: Isolated Docker demo smoke
+    name: Isolated Docker demo and HTTP emulator smoke
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -112,6 +112,7 @@ jobs:
       ADROBOT_PORT: "0"
       COMPOSE_PROJECT_NAME: adrobot-ci-${{ github.run_id }}-${{ github.run_attempt }}
       SMOKE_SNAPSHOT: /tmp/adrobot-ci-${{ github.run_id }}-${{ github.run_attempt }}.json
+      EMULATOR_SMOKE_SNAPSHOT: /tmp/adrobot-emulator-ci-${{ github.run_id }}-${{ github.run_attempt }}.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -178,6 +179,14 @@ jobs:
           with urllib.request.urlopen(base + f"/api/campaigns/{expected['id']}", timeout=10) as response:
               assert json.load(response) == expected, 'Draft must survive container recreation'
           PY
+      - name: Verify the reviewer HTTP emulator from fresh isolated volumes
+        run: |
+          docker compose --env-file /dev/null -f compose.emulator.yaml -p "${COMPOSE_PROJECT_NAME}-emulator" \
+            up -d --no-build --pull never --wait --wait-timeout 90
+          python3 scripts/check_emulator.py
+          docker compose --env-file /dev/null -f compose.emulator.yaml -p "${COMPOSE_PROJECT_NAME}-emulator" \
+            up -d --no-build --pull never --force-recreate --wait --wait-timeout 90
+          python3 scripts/check_emulator.py --recreated
       - name: Save the smoke-tested image for publication
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: docker image save --output "$RUNNER_TEMP/adrobot-image.tar" "$ADROBOT_IMAGE"
@@ -193,10 +202,14 @@ jobs:
           overwrite: true
       - name: Show isolated container logs on failure
         if: failure()
-        run: docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" logs --no-color
+        run: |
+          docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" logs --no-color
+          docker compose --env-file /dev/null -f compose.emulator.yaml -p "${COMPOSE_PROJECT_NAME}-emulator" logs --no-color
       - name: Clean only this smoke project's containers and volume
         if: always()
-        run: docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" down --volumes --remove-orphans
+        run: |
+          docker compose --env-file /dev/null -f compose.release.yaml -p "$COMPOSE_PROJECT_NAME" down --volumes --remove-orphans
+          docker compose --env-file /dev/null -f compose.emulator.yaml -p "${COMPOSE_PROJECT_NAME}-emulator" down --volumes --remove-orphans
 
   publish:
     name: Publish tested image to GHCR

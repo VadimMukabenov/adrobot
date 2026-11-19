@@ -1,0 +1,9 @@
+# Same HTTP boundary and volumes; only choose a published image instead of a build.
+services:
+  app:
+    build: !reset null
+    image: ${ADROBOT_IMAGE:-ghcr.io/vadimmukabenov/adrobot:latest}
+    pull_policy: always
+  keitaro:
+    image: ${ADROBOT_IMAGE:-ghcr.io/vadimmukabenov/adrobot:latest}
+    pull_policy: always

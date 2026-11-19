@@ -1,51 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 fail() { printf '%s\n' "$1" >&2; exit 1; }
 test -f compose.yaml || fail 'The start script must stay inside the Adrobot clone.'
-command -v docker >/dev/null || fail 'Install Docker with Compose v2.20+ first.'
+command -v docker >/dev/null || fail 'Install Docker with Compose v2.24+ first.'
 docker compose version >/dev/null
 docker info >/dev/null 2>&1 || fail 'Start Docker and allow this OS user to access it, then retry.'
-
-if [ ! -f .env ]; then
-  printf '%s\n' 'Test Keitaro: https://tlgk.host/admin/'
-  read -r -p 'Keitaro URL [https://tlgk.host] — press Enter for the test tracker: ' tracker
-  tracker=${tracker:-https://tlgk.host}
-  [[ "$tracker" =~ ^(https?://[^/?#@[:space:]]+)([/?#][^[:space:]]*)?$ ]] || fail 'Paste the full http:// or https:// URL of your real Keitaro page.'
-  tracker=${BASH_REMATCH[1]}
-  host=$(printf '%s' "${tracker#*://}" | tr '[:upper:]' '[:lower:]')
-  host=${host%%:*}
-  host=${host%.}
-  case "$host" in
-    example.com|*.example.com|example.org|*.example.org|example.net|*.example.net|example|*.example|invalid|*.invalid)
-      fail 'This is an example address, not your tracker. Use https://tlgk.host for this test or paste your own real tracker URL.' ;;
-  esac
-  printf 'Tracker: %s\n' "$tracker"
-  printf '%s\n' 'In Keitaro: account icon -> Account -> API keys. Copy the existing Admin API key.'
-  read -r -s -p 'Paste that API key and press Enter (typing is invisible): ' api_key
-  printf '\n'
-  test -n "$api_key" || fail 'The Admin API key cannot be empty.'
-  case "$tracker$api_key" in
-    *'\'*|*'${'*) fail 'Use the literal tracker address and API key, without escaping or ${...}.' ;;
-  esac
-  dotenv_value() {
-    local value="$1"
-    value=${value//\'/\\\'}
-    printf "'%s'" "$value"
-  }
-  umask 077
-  (
-    set -o noclobber
-    {
-      printf 'KEITARO_BASE_URL='; dotenv_value "$tracker"; printf '\n'
-      printf 'KEITARO_API_KEY='; dotenv_value "$api_key"; printf '\n'
-      printf '%s\n' 'DATABASE_URL=sqlite:///./adrobot.db' 'CAMPAIGN_PREFIX=test_mukabenov_'
-    } > .env
-  )
-  unset api_key
-fi
-
 docker compose up --build --wait
 address=$(docker compose port app 8765)
-printf '\nAdrobot: http://%s/\n' "$address"
+printf '\nOpen Adrobot: http://%s/\nConnect to Keitaro on that page.\n' "$address"

@@ -13,9 +13,17 @@ import { CampaignList } from "./components/CampaignList";
 import { CreateCampaignForm } from "./components/CreateCampaignForm";
 import { StreamEditor } from "./components/StreamEditor";
 
+import { SetupConnection } from "./components/SetupConnection";
+
 const emptyLookups: Lookups = { domains: [], groups: [], traffic_sources: [] };
 
 export default function App() {
+  const [ready, setReady] = useState(false);
+  const connected = useCallback(() => setReady(true), []);
+  return ready ? <CampaignApp /> : <SetupConnection onConnected={connected} />;
+}
+
+function CampaignApp() {
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
   const [lookups, setLookups] = useState<Lookups>(emptyLookups);
   const [prefix, setPrefix] = useState("test_mukabenov_");

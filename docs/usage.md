@@ -14,7 +14,10 @@ A FastAPI + SQLAlchemy + React editor for Keitaro campaigns. Create two-stream c
 
 ### First use and troubleshooting
 
-1. The campaign list should load. Open **New campaign** and check that domains,
+1. On first launch, open the setup page, keep the test Keitaro URL (or paste
+   your full admin URL), enter the existing Admin API key and click **Connect**.
+   The connection check only reads Keitaro; it does not create a campaign.
+   The campaign list should load. Open **New campaign** and check that domains,
    groups, sources and offers load. Empty lists or a 401/403 mean that the key or
    its resource permissions need attention; successful local startup alone does
    not validate those permissions.
@@ -25,9 +28,9 @@ A FastAPI + SQLAlchemy + React editor for Keitaro campaigns. Create two-stream c
 
 | Symptom | What to check |
 |---|---|
-| `no configuration file provided` | Run `pwd` and enter the Adrobot clone, not another project’s `infra/` directory. |
-| Missing `KEITARO_API_KEY` or `KEITARO_BASE_URL` | Edit `.env` in the Adrobot directory; Compose rejects empty required settings before startup. |
-| `docker: command not found` / Compose unavailable | Install Docker with Compose v2.20+ first. |
+| `no configuration file provided` | Run `~/adrobot/start` from any directory. |
+| First launch shows Connect to Keitaro | Enter the URL and Admin API key on that page; `.env` is optional. |
+| `docker: command not found` / Compose unavailable | Install Docker with Compose v2.24+ first. |
 | Docker daemon connection/permission error | Start Docker and use an OS account allowed to access its engine. |
 | `address already in use` / port allocation error | Stop the process already listening on 8765; run only one launch option. |
 | 401/403 or unavailable offers | Check the Admin API key and resource access in Keitaro. An admin login password cannot replace the key. |
@@ -40,9 +43,30 @@ authentication; public hosting needs authentication, authorization and TLS.
 
 ## Configuration
 
+Browser setup stores the verified connection in `/data/keitaro.json` in the
+Compose volume, with owner-only file permissions (0600). It survives container
+replacement; no API key is returned to the frontend or stored in browser storage.
+Existing nonempty environment API keys take precedence and skip setup. This is
+one local tracker connection, not a multi-user login system. Setup is available
+only through localhost/loopback, including Kubernetes port-forward.
+
+To change a browser-saved connection without deleting drafts: stop the app,
+remove only `keitaro.json` in the volume, then start and reconnect:
+
+```bash
+docker compose stop app &&
+docker compose run --rm --no-deps app rm -f /data/keitaro.json &&
+docker compose up --wait
+```
+
+If `.env` supplies a key, change/remove that value instead and recreate the
+container. Do not delete the data volume to reset connection settings.
+
+Environment configuration remains available for automated deployments:
+
 | Variable | Purpose |
 |---|---|
-| `KEITARO_BASE_URL` | Tracker origin, e.g. `https://tracker.example`; omit `/admin` and `/admin_api/v1`. |
+| `KEITARO_BASE_URL` | Tracker origin, default `https://tlgk.host`; environment values must omit `/admin` and `/admin_api/v1`. |
 | `KEITARO_API_KEY` | Existing Admin API key; server-only, sent in the `Api-Key` header. |
 | `DATABASE_URL` | Defaults to `sqlite:///./adrobot.db`, relative to the backend working directory. |
 | `CAMPAIGN_PREFIX` | Defaults to `test_mukabenov_`; creator and editor writes are restricted to this prefix. |

@@ -2,7 +2,7 @@
 
 ## Run without Docker
 
-From the repository root, create `.env` from `.env.example` and fill in the tracker origin and API key first. Requirements: **Python 3.12+, Node.js 22.12+ (Node 22 LTS
+From the repository root. Requirements: **Python 3.12+, Node.js 22.12+ (Node 22 LTS
 recommended), npm and [uv](https://docs.astral.sh/uv/getting-started/installation/)**.
 `python3`, `node`, `npm` and `uv` must be on PATH. Internet access is needed for
 the first dependency installation. Do not run this option while Docker or
@@ -15,7 +15,6 @@ dependencies, compiles React, migrates the database and starts the server:
 (
   set -eu
   test -f compose.yaml
-  test -f .env
   python3 -c 'import sys; assert sys.version_info >= (3, 12), "Python 3.12+ required"'
   node -e 'const [a,b] = process.versions.node.split(".").map(Number); if (a < 22 || (a === 22 && b < 12)) { throw Error("Node.js 22.12+ required"); }'
   npm --version
@@ -28,7 +27,8 @@ dependencies, compiles React, migrates the database and starts the server:
 )
 ```
 
-Wait for `Application startup complete`, then open **http://127.0.0.1:8765/**.
+Wait for `Application startup complete`, then open **http://127.0.0.1:8765/**
+and connect to Keitaro on the setup page. `.env` is optional.
 The backend serves React and the API together. Keep this terminal open; **Ctrl+C**
 stops the server. Repeat the block to restart safely; migrations are repeatable.
 The default local database is `backend/adrobot.db`. Docker and this option use

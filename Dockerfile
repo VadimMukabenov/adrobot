@@ -19,5 +19,5 @@ USER 10001:10001
 ENV DATABASE_URL=sqlite:////data/adrobot.db
 EXPOSE 8765
 HEALTHCHECK --interval=5s --timeout=3s --start-period=15s --retries=12 \
-    CMD [".venv/bin/python", "-c", "import json, urllib.request; h = json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=2)); assert h['status'] == 'ok' and h['configured']"]
+    CMD [".venv/bin/python", "-c", "import json, urllib.request; h = json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=2)); assert h['status'] == 'ok'"]
 CMD ["sh", "-c", ".venv/bin/alembic upgrade head && exec .venv/bin/uvicorn adrobot.app:create_app --factory --host 0.0.0.0 --port 8765 --workers 1"]

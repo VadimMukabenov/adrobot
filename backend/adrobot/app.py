@@ -1,9 +1,12 @@
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .connection import Connection, ConnectionInput
 from .creator import Creator
 from .db import Database
 from .editor import Editor
@@ -15,28 +18,54 @@ from .settings import Settings
 def create_app(settings=None, gateway=None, db=None):
     settings = settings or Settings()
     db = db or Database(settings.database_url)
-    if gateway is None:
-        from .keitaro import KeitaroGateway
-
-        gateway = KeitaroGateway(
-            settings.keitaro_base_url, settings.keitaro_api_key.get_secret_value()
-        )
+    gateway = Connection(settings, gateway)
     editor = Editor(db, gateway, settings.campaign_prefix)
     creator = Creator(db, gateway, settings.campaign_prefix)
     app = FastAPI(title="Adrobot", version="0.1.0")
     app.state.db, app.state.editor = db, editor
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, exc: RequestValidationError):
+        if request.url.path == "/api/connection":
+            # FastAPI's default validation errors may echo the entire input body.
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "Enter the Keitaro URL and Admin API key in the setup form."},
+            )
+        return await request_validation_exception_handler(request, exc)
+
     @app.exception_handler(AppError)
     async def app_error(_: Request, exc: AppError):
         return JSONResponse(status_code=exc.status, content={"detail": exc.message})
+
+    @app.middleware("http")
+    async def require_connection(request: Request, call_next):
+        if (
+            request.url.path.startswith("/api/")
+            and request.url.path not in ("/api/health", "/api/connection")
+            and not gateway.configured
+        ):
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Connect to Keitaro using the setup page first."},
+            )
+        return await call_next(request)
 
     @app.get("/api/health")
     def health():
         return {
             "status": "ok",
-            "configured": bool(settings.keitaro_api_key.get_secret_value()),
+            "configured": gateway.configured,
             "campaign_prefix": settings.campaign_prefix,
         }
+
+    @app.get("/api/connection")
+    def connection(request: Request):
+        return JSONResponse(content=gateway.public(request), headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/connection")
+    def connect(body: ConnectionInput, request: Request):
+        return gateway.connect(body, request)
 
     @app.get("/api/campaigns")
     def campaigns():

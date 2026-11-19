@@ -13,3 +13,6 @@ artifacts
 docs/research
 docs/superpowers
 docs/progress.md
+
+**/keitaro.json
+**/.keitaro-*

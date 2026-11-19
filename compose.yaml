@@ -4,10 +4,12 @@ services:
     build: .
     ports:
       - "127.0.0.1:${ADROBOT_PORT:-8765}:8765"
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
-      KEITARO_BASE_URL: ${KEITARO_BASE_URL:?Set KEITARO_BASE_URL in .env}
-      KEITARO_API_KEY: ${KEITARO_API_KEY:?Set KEITARO_API_KEY in .env}
+      KEITARO_BASE_URL: ${KEITARO_BASE_URL:-https://tlgk.host}
+      KEITARO_API_KEY: ${KEITARO_API_KEY:-}
       DATABASE_URL: sqlite:////data/adrobot.db
     volumes:
       - adrobot-data:/data

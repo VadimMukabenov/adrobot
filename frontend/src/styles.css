@@ -893,3 +893,52 @@ input:disabled {
     animation: none;
   }
 }
+
+.setup-page {
+  padding: 64px 20px;
+  display: flex;
+  justify-content: center;
+}
+.setup-card {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.setup-icon {
+  background: #edf3ff;
+  color: #285ac7;
+  border-radius: 12px;
+  padding: 14px;
+  align-self: flex-start;
+}
+.setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.setup-form label {
+  font-weight: 650;
+  margin-top: 12px;
+}
+.setup-form input {
+  width: 100%;
+}
+.setup-form a {
+  color: #285ac7;
+  text-underline-offset: 3px;
+}
+.setup-form .button {
+  margin-top: 18px;
+  min-height: 44px;
+}
+.setup-footnote {
+  text-align: center;
+  font-size: 13px;
+}
+@media (max-width: 600px) {
+  .setup-page {
+    padding-top: 32px;
+  }
+}

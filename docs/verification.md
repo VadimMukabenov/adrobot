@@ -90,3 +90,25 @@ tests first reproduced rejection of a full admin URL and acceptance of a literal
 example URL, then passed after the fix. All **61 backend tests** and Ruff passed;
 `bash -n start` passed. Existing `.env` files remain preserved. Real assignment
 credentials are not part of the public examples.
+
+## Browser setup: 19 November 2026
+
+- Backend: 73 tests passed; Ruff and Bash syntax checks passed. Tests cover a
+  clean bootstrap, full admin URL normalization, rejected keys, read-only remote
+  validation, owner-only persistence and restart, environment precedence,
+  cross-origin/foreign-Host rejection and secret-free validation responses.
+- Frontend: 10 tests passed; TypeScript and production build passed. Setup gates
+  editor requests, shows a hidden key field, handles errors/retry and clears the
+  key on success without browser storage.
+- The README launcher ran from `/tmp` without `.env` or terminal input against
+  an isolated Compose project on port 8771. Image build, empty-volume migrations,
+  health and the compiled setup page passed. A repeat build/start also passed.
+- In-app browser: default test URL/direct help links, invalid-address error and
+  successful Connect → editor were checked. Connection used a synthetic key and
+  an isolated fake Keitaro HTTP boundary inside the QA container; no real
+  campaigns were changed. Container restart retained the verified connection,
+  and its saved file had mode 0600.
+- Desktop and 390×844 mobile setup screens were inspected. The mobile document
+  stayed 390px wide; no framework overlay or browser console errors/warnings
+  were recorded. This does not revalidate the current real tracker key or all
+  resource permissions. Existing environment settings still skip browser setup.

@@ -83,6 +83,11 @@ class Connection:
     def configured(self):
         return self.gateway is not None
 
+    def close(self):
+        close = getattr(self.gateway, "close", None)
+        if close is not None:
+            close()
+
     def local_request(self, request: Request):
         if request.url.hostname not in ("localhost", "127.0.0.1", "::1"):
             raise AppError(403, "Open setup through http://127.0.0.1:8765/.")
@@ -115,9 +120,13 @@ class Connection:
                 raise AppError(422, "Paste the Admin API key from Keitaro → Account → API keys.")
             candidate = KeitaroGateway(url, key)
             # Read-only, bounded connection check; never creates/updates remote resources.
-            result = candidate.request("GET", "campaigns", params={"limit": 1})
-            if not isinstance(result, list):
-                raise AppError(502, "Keitaro returned an unexpected campaign response.")
+            try:
+                result = candidate.request("GET", "campaigns", params={"limit": 1})
+                if not isinstance(result, list):
+                    raise AppError(502, "Keitaro returned an unexpected campaign response.")
+            except BaseException:
+                candidate.close()
+                raise
             self.path.parent.mkdir(parents=True, exist_ok=True)
             fd, temporary = tempfile.mkstemp(dir=self.path.parent, prefix=".keitaro-")
             try:
@@ -127,6 +136,7 @@ class Connection:
                     os.fsync(file.fileno())
                 os.replace(temporary, self.path)
             except OSError:
+                candidate.close()
                 raise AppError(
                     500, "Could not save connection. Check the server data volume permissions."
                 ) from None

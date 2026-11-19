@@ -14,6 +14,105 @@ def body(**overrides):
     )
 
 
+def test_fresh_creation_does_not_wait_for_unrelated_campaign_pagination(setup):
+    client, remote, *_ = setup
+
+    def unavailable_index():
+        raise TimeoutError("campaign index is slow or unavailable")
+
+    remote.list_campaigns = unavailable_index
+    response = client.post("/api/campaigns", json=body())
+    assert response.status_code == 200
+    assert response.json()["status"] == "confirmed"
+
+
+def test_browser_creation_streams_progress_and_only_finishes_after_confirmation(setup):
+    import json
+
+    client, remote, *_ = setup
+    response = client.post(
+        "/api/campaigns", json=body(), headers={"Accept": "application/x-ndjson"}
+    )
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert events[0]["type"] == "progress"
+    assert events[0]["operation"]["phase"] == "validating_settings"
+    assert events[-1]["type"] == "result"
+    operation = events[-1]["operation"]
+    assert operation["status"] == "confirmed"
+    assert remote.get_campaign(operation["campaign_id"])["state"] == "active"
+
+
+def test_progress_is_immediate_and_browser_disconnect_does_not_cancel_remote_write(setup):
+    import json
+    from threading import Event
+    from time import monotonic
+
+    from adrobot.creation_progress import CreationProgress
+    from adrobot.creator import Creator
+    from adrobot.schemas import CreateCampaign
+
+    _, remote, settings, db = setup
+    entered, release = Event(), Event()
+    original = remote.lookups
+
+    def slow_lookups():
+        entered.set()
+        assert release.wait(3)
+        return original()
+
+    remote.lookups = slow_lookups
+    creator = Creator(db, remote, settings.campaign_prefix)
+    progress = CreationProgress(creator)
+    events = progress.events(CreateCampaign(**body()))
+    started = monotonic()
+    first = json.loads(next(events))
+    assert monotonic() - started < 1
+    assert first["operation"]["phase"] == "validating_settings"
+    assert not entered.is_set()
+    try:
+        next(events)
+        assert entered.wait(1)
+        events.close()
+    finally:
+        release.set()
+        progress.close()
+    assert creator.operation(body()["operation_id"])["status"] == "confirmed"
+    assert len(remote.campaigns) == 2
+
+
+def test_stream_validation_error_does_not_claim_success_or_create_remote_resources(setup):
+    import json
+
+    client, remote, *_ = setup
+    invalid = body()
+    invalid["domain_id"] = 999
+    response = client.post(
+        "/api/campaigns", json=invalid, headers={"Accept": "application/x-ndjson"}
+    )
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert events[-1]["type"] == "error"
+    assert events[-1]["status"] == 422
+    assert not any(event["type"] == "result" for event in events)
+    assert len(remote.campaigns) == 1
+
+
+def test_lost_remote_response_is_not_hidden_by_progress_and_retry_keeps_identity(setup):
+    import json
+
+    client, remote, *_ = setup
+    remote.campaign_timeout_once = True
+    headers = {"Accept": "application/x-ndjson"}
+    first = client.post("/api/campaigns", json=body(), headers=headers)
+    uncertain = json.loads(first.text.splitlines()[-1])["operation"]
+    assert uncertain["status"] == "uncertain"
+    second = client.post("/api/campaigns", json=body(), headers=headers)
+    confirmed = json.loads(second.text.splitlines()[-1])["operation"]
+    assert confirmed["status"] == "confirmed"
+    assert confirmed["operation_id"] == uncertain["operation_id"]
+    assert len(remote.campaigns) == 2
+
+
 def test_creator_sets_metadata_and_two_ordered_streams_and_confirms_active(setup):
     c, remote, *_ = setup
     response = c.post("/api/campaigns", json=body())

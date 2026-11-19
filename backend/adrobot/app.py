@@ -1,12 +1,15 @@
+from asyncio import to_thread
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .connection import Connection, ConnectionInput
+from .creation_progress import CreationProgress
 from .creator import Creator
 from .db import Database
 from .editor import Editor
@@ -21,7 +24,17 @@ def create_app(settings=None, gateway=None, db=None):
     gateway = Connection(settings, gateway)
     editor = Editor(db, gateway, settings.campaign_prefix)
     creator = Creator(db, gateway, settings.campaign_prefix)
-    app = FastAPI(title="Adrobot", version="0.1.0")
+    progress = CreationProgress(creator)
+
+    @asynccontextmanager
+    async def lifespan(_):
+        try:
+            yield
+        finally:
+            await to_thread(progress.close)
+            gateway.close()
+
+    app = FastAPI(title="Adrobot", version="0.1.0", lifespan=lifespan)
     app.state.db, app.state.editor = db, editor
 
     @app.exception_handler(RequestValidationError)
@@ -73,7 +86,12 @@ def create_app(settings=None, gateway=None, db=None):
         return editor.list_campaigns()
 
     @app.post("/api/campaigns")
-    def create(body: CreateCampaign):
+    def create(body: CreateCampaign, request: Request):
+        if "application/x-ndjson" in request.headers.get("accept", ""):
+            return StreamingResponse(
+                progress.events(body), media_type="application/x-ndjson",
+                headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+            )
         result = creator.create(body)
         return JSONResponse(
             status_code=200 if result["status"] == "confirmed" else 202, content=result

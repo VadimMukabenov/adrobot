@@ -16,6 +16,16 @@ class KeitaroGateway:
             raise ValueError("Keitaro URL must be an HTTP(S) origin without credentials.")
         self.base_url = base_url.rstrip("/") + "/admin_api/v1/"
         self._api_key, self._transport = api_key, transport
+        self._client = httpx.Client(
+            base_url=self.base_url,
+            headers={"Api-Key": self._api_key},
+            timeout=httpx.Timeout(20, connect=10),
+            transport=self._transport,
+            follow_redirects=False,
+        )
+
+    def close(self):
+        self._client.close()
 
     def request(self, method, path, **kwargs):
         if not self._api_key:
@@ -25,28 +35,21 @@ class KeitaroGateway:
         read_only = method.upper() == "GET"
         attempts = 2 if read_only else 1
         try:
-            with httpx.Client(
-                base_url=self.base_url,
-                headers={"Api-Key": self._api_key},
-                timeout=httpx.Timeout(20, connect=10),
-                transport=self._transport,
-                follow_redirects=False,
-            ) as client:
-                for attempt in range(attempts):
-                    try:
-                        response = client.request(method, path, **kwargs)
-                        break
-                    except httpx.TransportError as error:
-                        # Never log headers, response bodies or exception text containing secrets.
-                        logger.warning(
-                            "Keitaro %s transport failure: %s (attempt %d/%d)",
-                            method.upper(),
-                            type(error).__name__,
-                            attempt + 1,
-                            attempts,
-                        )
-                        if attempt + 1 == attempts:
-                            raise
+            for attempt in range(attempts):
+                try:
+                    response = self._client.request(method, path, **kwargs)
+                    break
+                except httpx.TransportError as error:
+                    # Never log headers, response bodies or exception text containing secrets.
+                    logger.warning(
+                        "Keitaro %s transport failure: %s (attempt %d/%d)",
+                        method.upper(),
+                        type(error).__name__,
+                        attempt + 1,
+                        attempts,
+                    )
+                    if attempt + 1 == attempts:
+                        raise
         except httpx.HTTPError as error:
             if not read_only:
                 message = "Keitaro connection failed or timed out. Check the remote state."

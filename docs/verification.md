@@ -169,3 +169,25 @@ blockers. The frontend was unchanged.
 
 No real tracker credentials, saved connection, campaigns, paid traffic or
 lead data were used or changed by this delivery's automated scenarios.
+
+## Creation responsiveness: 19 November 2026
+
+- Backend: **118 tests passed**; the CI-scoped Ruff check passed. Frontend:
+  **37 behavior tests passed**, TypeScript and production build passed. All
+  **three real HTTP browser scenarios passed**.
+- With tracker validation deliberately blocked, the browser received the first
+  streaming HTTP response and displayed the current stage in **57ms** in the
+  automated run. A separate in-app browser check observed feedback in **320ms**.
+  These controlled measurements establish prompt feedback, not a one-second
+  guarantee for remote Keitaro campaign creation. Success still requires remote
+  read-back; elapsed time and actual stages remain visible while it runs.
+- The HTTP adapter reuses connections (verified with a real HTTP/1.1 socket),
+  and a fresh creation avoids an unnecessary full campaign-index read. Resumed
+  operations retain that reconciliation check and the same saved operation ID.
+- Held requests, browser disconnect, lost remote POST responses, validation
+  errors, repeat submission and leaving the form were checked. Closing a stream
+  does not cancel a possible write, and automatic write retries remain disabled.
+  Legacy JSON clients retain their existing endpoint behavior.
+- Independent review found no Critical or Important issues in these changes.
+  Tests used isolated SQLite and a loopback tracker fixture. No new live tracker
+  campaigns were created or changed for this fix.

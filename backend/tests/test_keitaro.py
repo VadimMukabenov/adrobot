@@ -7,6 +7,50 @@ from adrobot.errors import AppError
 from adrobot.keitaro import KeitaroGateway
 
 
+def test_consecutive_tracker_requests_reuse_the_same_tcp_connection():
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    connections = []
+
+    class Server(ThreadingHTTPServer):
+        daemon_threads = True
+
+        def get_request(self):
+            connection, address = super().get_request()
+            connections.append(address)
+            return connection, address
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_GET(self):
+            data = b"[]"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *_):
+            pass
+
+    server = Server(("127.0.0.1", 0), Handler)
+    worker = Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    gateway = KeitaroGateway(f"http://127.0.0.1:{server.server_port}", "synthetic")
+    try:
+        gateway.list_offers()
+        gateway.list_offers("1")
+        assert len(connections) == 1
+    finally:
+        if hasattr(gateway, "close"):
+            gateway.close()
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=2)
+
+
 def test_patch_only_sends_offers_and_preserves_header_and_url_contract():
     requests = []
 

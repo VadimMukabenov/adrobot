@@ -19,6 +19,64 @@ const pending = {
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
 
+it("shows immediate creation progress and reads streamed phases without early success", async () => {
+  localStorage.setItem("adrobot.creation", JSON.stringify(pending));
+  const onCreated = vi.fn();
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(value) {
+      controller = value;
+    },
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(stream, {
+        headers: { "Content-Type": "application/x-ndjson" },
+      }),
+    ),
+  );
+  render(
+    <CreateCampaignForm
+      lookups={lookups}
+      prefix="test_demo_"
+      onBack={vi.fn()}
+      onCreated={onCreated}
+    />,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /reconcile and resume/i }),
+  );
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "Checking Keitaro settings",
+  );
+  expect(onCreated).not.toHaveBeenCalled();
+  const send = (type: string, phase: string, status = "running") =>
+    controller.enqueue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          type,
+          operation: {
+            operation_id: pending.operation_id,
+            phase,
+            status,
+            campaign_id: 81,
+          },
+        }) + "\n",
+      ),
+    );
+  send("progress", "creating_stream_1");
+  await screen.findByText(/Creating country redirect/);
+  expect(onCreated).not.toHaveBeenCalled();
+  expect(
+    JSON.parse(localStorage.getItem("adrobot.creation")!).operation_id,
+  ).toBe(pending.operation_id);
+  send("result", "complete", "confirmed");
+  controller.close();
+  await waitFor(() => expect(onCreated).toHaveBeenCalledExactlyOnceWith(81));
+  expect(localStorage.getItem("adrobot.creation")).toBeNull();
+});
+
 it("recovers the same unfinished creation after a page reload without auto publishing", () => {
   localStorage.setItem("adrobot.creation", JSON.stringify(pending));
   const fetch = vi.fn();
@@ -36,6 +94,79 @@ it("recovers the same unfinished creation after a page reload without auto publi
     screen.getByRole("button", { name: /reconcile and resume/i }),
   ).toBeEnabled();
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it("keeps the operation after an interrupted progress stream and never repeats the POST", async () => {
+  localStorage.setItem("adrobot.creation", JSON.stringify(pending));
+  const onCreated = vi.fn();
+  const event =
+    JSON.stringify({
+      type: "progress",
+      operation: {
+        operation_id: pending.operation_id,
+        status: "running",
+        phase: "creating_campaign",
+      },
+    }) + "\n";
+  const fetch = vi.fn().mockResolvedValue(
+    new Response(event, {
+      headers: { "Content-Type": "application/x-ndjson" },
+    }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  render(
+    <CreateCampaignForm
+      lookups={lookups}
+      prefix="test_demo_"
+      onBack={vi.fn()}
+      onCreated={onCreated}
+    />,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /reconcile and resume/i }),
+  );
+  await screen.findByRole("alert");
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(onCreated).not.toHaveBeenCalled();
+  expect(
+    JSON.parse(localStorage.getItem("adrobot.creation")!).operation_id,
+  ).toBe(pending.operation_id);
+  expect(
+    screen.getByRole("button", { name: /reconcile and resume/i }),
+  ).toBeEnabled();
+});
+
+it("does not navigate an old form after the user leaves during creation", async () => {
+  localStorage.setItem("adrobot.creation", JSON.stringify(pending));
+  let finish!: (value: Response) => void;
+  const onCreated = vi.fn();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockReturnValue(
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+    ),
+  );
+  const form = render(
+    <CreateCampaignForm
+      lookups={lookups}
+      prefix="test_demo_"
+      onBack={vi.fn()}
+      onCreated={onCreated}
+    />,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /reconcile and resume/i }),
+  );
+  form.unmount();
+  finish(
+    new Response(JSON.stringify({ status: "confirmed", campaign_id: 81 })),
+  );
+  await waitFor(() =>
+    expect(localStorage.getItem("adrobot.creation")).toBeNull(),
+  );
+  expect(onCreated).not.toHaveBeenCalled();
 });
 
 it("unlocks the form after server validation failure so input can be corrected", async () => {

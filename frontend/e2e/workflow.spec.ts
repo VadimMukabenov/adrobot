@@ -70,16 +70,42 @@ async function chooseOffer(
   await scope.getByRole("option", { name: new RegExp(String(id)) }).click();
   await scope.getByRole("button", { name: addButton, exact: true }).click();
 }
-async function newCampaign(page: Page, name: string) {
+async function newCampaign(
+  page: Page,
+  request: APIRequestContext,
+  name: string,
+) {
   await page.getByRole("button", { name: "New campaign", exact: true }).click();
   await page.getByLabel("Campaign name", { exact: true }).fill(name);
   await chooseOffer(page, 101, "Select offer");
   await expect(
     page.getByRole("button", { name: "Create campaign", exact: true }),
   ).toBeEnabled();
+  // The real HTTP tracker is deliberately blocked. The application must
+  // acknowledge the POST and render useful progress within one second.
+  await control(request, { hold_lookups: true });
+  const accepted = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/campaigns") &&
+      response.request().method() === "POST",
+    { timeout: 1000 },
+  );
+  const started = performance.now();
   await page
     .getByRole("button", { name: "Create campaign", exact: true })
     .click();
+  const response = await accepted;
+  expect(response.headers()["content-type"]).toContain("application/x-ndjson");
+  await expect(page.getByRole("status")).toContainText(
+    "Checking Keitaro settings",
+    { timeout: 1000 },
+  );
+  const feedbackMs = performance.now() - started;
+  expect(feedbackMs).toBeLessThan(1000);
+  console.log(
+    `Creation first HTTP response and visible progress: ${Math.round(feedbackMs)}ms with tracker blocked`,
+  );
+  await control(request, { hold_lookups: false });
 }
 const offerSection = (page: Page) =>
   page.getByRole("region", { name: /^Stream 2: Offers$/ });
@@ -310,7 +336,7 @@ test("a lost create response resumes the same persisted operation without a seco
 }) => {
   await open(page, request);
   await control(request, { drop_create: true });
-  await newCampaign(page, "test_mukabenov_e2e_lost_create");
+  await newCampaign(page, request, "test_mukabenov_e2e_lost_create");
   await expect(
     page.getByRole("button", {
       name: "Reconcile and resume this creation",

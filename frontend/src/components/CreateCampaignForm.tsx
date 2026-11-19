@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
-import { api, ApiError, errorText, post } from "../api";
+import { api, ApiError, createCampaign, errorText } from "../api";
 import type { Creation, Lookups, Offer, Operation } from "../types";
 import { OfferSearch } from "./OfferSearch";
 
@@ -9,6 +9,18 @@ type Props = {
   prefix: string;
   onBack: () => void;
   onCreated: (id: number) => void;
+};
+
+const phases: Record<string, string> = {
+  validating_settings: "Checking Keitaro settings…",
+  starting: "Preparing campaign…",
+  creating_campaign: "Creating campaign…",
+  campaign_created: "Campaign created. Preparing streams…",
+  creating_stream_1: "Creating country redirect…",
+  creating_stream_2: "Creating offer stream…",
+  verifying_streams: "Checking campaign and both streams…",
+  enabling_campaign: "Activating campaign and confirming the result…",
+  complete: "Campaign confirmed.",
 };
 
 function savedCreation(): Creation | null {
@@ -64,7 +76,28 @@ export function CreateCampaignForm({
   const [operation, setOperation] = useState<Operation | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [phase, setPhase] = useState("validating_settings");
+  const [elapsed, setElapsed] = useState(0);
+  const inFlight = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!busy) return;
+    const started = performance.now();
+    const timer = setInterval(
+      () => setElapsed(Math.floor((performance.now() - started) / 1000)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [busy]);
   async function submit() {
+    if (inFlight.current) return;
+    inFlight.current = true;
     const payload = request || {
       name,
       country: country.trim().toUpperCase(),
@@ -77,14 +110,18 @@ export function CreateCampaignForm({
     setRequest(payload);
     setBusy(true);
     setError("");
+    setPhase("validating_settings");
+    setElapsed(0);
     // Retain operation identity if the tab is closed before the remote response arrives.
-    localStorage.setItem("adrobot.creation", JSON.stringify(payload));
     try {
-      const result = await post<Operation>("/campaigns", payload);
+      localStorage.setItem("adrobot.creation", JSON.stringify(payload));
+      const result = await createCampaign(payload, (progress) => {
+        if (mounted.current) setPhase(progress.phase);
+      });
       setOperation(result);
       if (result.status === "confirmed" && result.campaign_id) {
         localStorage.removeItem("adrobot.creation");
-        onCreated(result.campaign_id);
+        if (mounted.current) onCreated(result.campaign_id);
       }
     } catch (e) {
       setError(errorText(e));
@@ -103,6 +140,7 @@ export function CreateCampaignForm({
         }
       }
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
@@ -223,7 +261,17 @@ export function CreateCampaignForm({
             {error}
           </div>
         )}
-        {operation && operation.status !== "confirmed" && (
+        {busy && (
+          <div className="notice" role="status" aria-live="polite">
+            <strong>{phases[phase] || "Checking saved creation…"}</strong>
+            <p>{elapsed}s elapsed · Waiting for confirmation from Keitaro.</p>
+            <small>
+              You do not need to click again. The same operation is kept to
+              prevent duplicates.
+            </small>
+          </div>
+        )}
+        {!busy && operation && operation.status !== "confirmed" && (
           <div className="notice warning" role="status">
             <strong>Not fully confirmed · {operation.phase}</strong>
             <p>{operation.message}</p>
@@ -253,7 +301,11 @@ export function CreateCampaignForm({
           }
         >
           {busy && <LoaderCircle size={18} className="spin" />}
-          {request ? "Reconcile and resume this creation" : "Create campaign"}
+          {busy
+            ? "Creating campaign…"
+            : request
+              ? "Reconcile and resume this creation"
+              : "Create campaign"}
         </button>
         {request && (
           <small className="muted">

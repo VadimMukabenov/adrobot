@@ -70,7 +70,12 @@ class Creator:
             if campaign_id:
                 campaign = self.gateway.get_campaign(campaign_id)
             else:
-                matches = [c for c in self.gateway.list_campaigns() if c.get("alias") == alias]
+                # A brand-new alias has never been sent. Only a resumed operation
+                # needs the expensive full-index read to reconcile a lost POST.
+                matches = (
+                    [c for c in self.gateway.list_campaigns() if c.get("alias") == alias]
+                    if existing is not None else []
+                )
                 if len(matches) > 1:
                     raise AppError(409, "Alias is ambiguous. Manual inspection is required.")
                 campaign = matches[0] if matches else None

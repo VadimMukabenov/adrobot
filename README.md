@@ -11,11 +11,18 @@ Requires **Git and Docker with Compose v2.24+**. Paste from **any directory**:
 git clone https://github.com/VadimMukabenov/adrobot ~/adrobot && ~/adrobot/start
 ```
 
-Open **http://127.0.0.1:8765/**. The setup page has two fields:
+Open **http://127.0.0.1:8765/**, then connect:
 
-- **Keitaro URL** is already filled in: [test Keitaro](https://tlgk.host/admin/).
-- **Admin API key**: in Keitaro, account icon → **Account → API keys**.
-  Paste the existing key and click **Connect**. [Where to find the key](https://docs.keitaro.io/en/team-management/admin-api-keys.html).
+1. Sign in to **[test Keitaro](https://tlgk.host/admin/)** using the account from the assignment:
+
+   | Login | Password |
+   |---|---|
+   | `fortests@etolegko.com` | `T9*2jiT8zoUKEH1J7VvFqkXM` |
+
+2. In Keitaro: account icon → **Account → API keys**. Copy the existing key.
+   [Where to find it](https://docs.keitaro.io/en/team-management/admin-api-keys.html).
+3. Back in Adrobot, keep the prefilled **Keitaro URL**, paste the key into
+   **Admin API key** and click **Connect**.
 
 Docker handles the build, database and startup. Connection settings and drafts
 survive restarts. Start again with `~/adrobot/start`.

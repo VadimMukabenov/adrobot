@@ -131,6 +131,37 @@ class Handler(BaseHTTPRequestHandler):
                     )
                 )
         if not path.startswith("/admin_api/v1/"):
+            # Public visitor routes need no Admin API key. The isolated tracker
+            # displays its first offer so the browser can test the shared link.
+            with tracker.lock:
+                campaign = next(
+                    (
+                        c
+                        for c in tracker.campaigns.values()
+                        if path == "/" + c.get("alias", "") and c.get("state") == "active"
+                    ),
+                    None,
+                )
+                if campaign:
+                    stream = next(
+                        (
+                            s
+                            for s in tracker.streams.values()
+                            if s["campaign_id"] == campaign["id"] and s.get("offers")
+                        ),
+                        None,
+                    )
+                    if stream:
+                        offer_id = int(stream["offers"][0]["offer_id"])
+                        body = (
+                            f"<!doctype html><title>Test offer</title><h1>Offer {offer_id}</h1>"
+                        ).encode()
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/html; charset=utf-8")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
             return self.respond({}, 404)
         if self.headers.get("Api-Key") != "e2e-local-key":
             return self.respond({}, 401)

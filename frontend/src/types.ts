@@ -19,7 +19,13 @@ export type Stream = {
   offers: Link[];
   total: number;
 };
-export type CampaignSummary = { id: number; name: string; state?: string };
+export type CampaignSummary = {
+  id: number;
+  name: string;
+  state?: string;
+  visitor_url?: string | null;
+  visitor_url_observed_at?: string;
+};
 export type Campaign = CampaignSummary & {
   domain_id: number;
   group_id: number;

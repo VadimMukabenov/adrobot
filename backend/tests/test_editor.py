@@ -28,6 +28,7 @@ def test_refresh_reads_independent_remote_resources_concurrently(setup):
         def read(*args):
             gate.wait()
             return method(*args)
+
         return read
 
     remote.get_campaign = concurrent(remote.get_campaign)
@@ -275,9 +276,12 @@ def test_push_rechecks_live_campaign_prefix_and_preserves_draft(setup):
     assert remote.streams[11] == before
     assert stream(c)["dirty"]
     assert stream(c)["status"] == "ready"
-    assert c.post(
-        "/api/streams/11/cancel", json={"expected_revision": stream(c)["revision"]}
-    ).status_code == 200
+    assert (
+        c.post(
+            "/api/streams/11/cancel", json={"expected_revision": stream(c)["revision"]}
+        ).status_code
+        == 200
+    )
 
 
 def test_push_rejects_stream_moved_to_another_campaign(setup):
@@ -291,3 +295,38 @@ def test_push_rejects_stream_moved_to_another_campaign(setup):
     assert remote.streams[11] == before
     assert stream(c)["dirty"]
     assert stream(c)["status"] == "ready"
+
+
+def test_visitor_link_uses_public_alias_and_connected_origin_without_private_fields(setup):
+    c, remote, *_ = setup
+    remote.campaigns[7].update(
+        alias="test_public_123", token="private-secret", url="https://private.invalid/secret"
+    )
+    c.app.state.editor.gateway.url = "https://tracker.test/admin/"
+    listed = c.get("/api/campaigns").json()[0]
+    assert listed["visitor_url"] == "https://tracker.test/test_public_123"
+    assert "private-secret" not in str(listed) and "private.invalid" not in str(listed)
+    refreshed = c.post("/api/campaigns/7/fetch").json()
+    assert refreshed["visitor_url"] == listed["visitor_url"]
+    assert refreshed["visitor_url_observed_at"] >= listed["visitor_url_observed_at"]
+    assert (
+        c.get("/api/campaigns/7").json()["visitor_url_observed_at"]
+        == refreshed["visitor_url_observed_at"]
+    )
+    assert c.get("/api/campaigns/7").json()["visitor_url"] == listed["visitor_url"]
+
+
+def test_visitor_link_rejects_unsafe_alias_origin_and_demo_mode(setup):
+    c, remote, *_ = setup
+    gateway = c.app.state.editor.gateway
+    for alias, origin in [
+        ("../admin", "https://tracker.test"),
+        ("test_ok", "javascript:alert(1)"),
+        ("test_ok", "https://user:secret@tracker.test"),
+    ]:
+        remote.campaigns[7]["alias"] = alias
+        gateway.url = origin
+        assert c.get("/api/campaigns").json()[0]["visitor_url"] is None
+    gateway.mode = "demo"
+    gateway.url = "https://tracker.test"
+    assert c.get("/api/campaigns").json()[0]["visitor_url"] is None

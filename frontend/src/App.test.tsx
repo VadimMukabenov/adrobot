@@ -618,3 +618,99 @@ it("opens an editable new campaign while keeping a previous creation available t
     fetch.mock.calls.filter(([, options]) => options?.method === "POST"),
   ).toHaveLength(0);
 });
+
+it("shows the visitor link from the index for an already cached campaign without refetching its draft", async () => {
+  const url = "https://tracker.test/test_123";
+  const fetch = serve((path) =>
+    path === "/api/campaigns"
+      ? Promise.resolve(response([{ ...campaign(1), visitor_url: url }]))
+      : undefined,
+  );
+  render(<App />);
+  await screen.findByRole("heading", { name: "test_mukabenov_1" });
+  expect(screen.getByRole("link", { name: "Open as visitor" })).toHaveAttribute(
+    "href",
+    url,
+  );
+  expect(
+    fetch.mock.calls.filter(([, options]) => options?.method === "POST"),
+  ).toHaveLength(0);
+});
+
+it("uses a fresh index link instead of an old cached link without dropping a dirty draft", async () => {
+  const newURL = "https://tracker.test/new_alias";
+  const fetch = serve((path) => {
+    if (path === "/api/campaigns")
+      return Promise.resolve(
+        response([
+          {
+            ...campaign(1),
+            visitor_url: newURL,
+            visitor_url_observed_at: "2026-11-19T10:00:02+00:00",
+          },
+        ]),
+      );
+    if (path === "/api/campaigns/1")
+      return Promise.resolve(
+        response({
+          ...campaign(1),
+          visitor_url: "https://tracker.test/old_alias",
+          visitor_url_observed_at: "2026-11-19T10:00:01+00:00",
+        }),
+      );
+  });
+  render(<App />);
+  await screen.findByRole("heading", { name: "test_mukabenov_1" });
+  expect(screen.getByRole("link", { name: "Open as visitor" })).toHaveAttribute(
+    "href",
+    newURL,
+  );
+  expect(screen.getByText("Unpublished changes")).toBeVisible();
+  expect(
+    fetch.mock.calls.filter(([, options]) => options?.method === "POST"),
+  ).toHaveLength(0);
+});
+
+it("uses the newer link returned by an explicit campaign refresh", async () => {
+  const refreshedURL = "https://tracker.test/refreshed_alias";
+  const clean = {
+    ...campaign(1),
+    streams: campaign(1).streams.map((stream) => ({ ...stream, dirty: false })),
+  };
+  serve((path, options) => {
+    if (path === "/api/campaigns")
+      return Promise.resolve(
+        response([
+          {
+            ...clean,
+            visitor_url: "https://tracker.test/index_alias",
+            visitor_url_observed_at: "2026-11-19T10:00:02+00:00",
+          },
+        ]),
+      );
+    if (path === "/api/campaigns/1")
+      return Promise.resolve(
+        response({
+          ...clean,
+          visitor_url: "https://tracker.test/old_alias",
+          visitor_url_observed_at: "2026-11-19T10:00:01+00:00",
+        }),
+      );
+    if (path === "/api/campaigns/1/fetch" && options?.method === "POST")
+      return Promise.resolve(
+        response({
+          ...clean,
+          visitor_url: refreshedURL,
+          visitor_url_observed_at: "2026-11-19T10:00:03+00:00",
+        }),
+      );
+  });
+  render(<App />);
+  await screen.findByRole("heading", { name: "test_mukabenov_1" });
+  fireEvent.click(screen.getByRole("button", { name: "Refresh from Keitaro" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("link", { name: "Open as visitor" }),
+    ).toHaveAttribute("href", refreshedURL),
+  );
+});

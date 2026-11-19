@@ -177,6 +177,26 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
   expect(streams[1].offers).toEqual([
     { offer_id: 101, share: 100, state: "active" },
   ]);
+  const visitorURL = `${trackerURL}/${created.alias}`;
+  await expect(page.getByLabel("Visitor link", { exact: true })).toHaveValue(
+    visitorURL,
+  );
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy link", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Link copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    visitorURL,
+  );
+  const popupPromise = page.waitForEvent("popup");
+  await page
+    .getByRole("link", { name: "Open as visitor", exact: true })
+    .click();
+  const visitor = await popupPromise;
+  await expect(visitor).toHaveURL(visitorURL);
+  await expect(
+    visitor.getByRole("heading", { name: "Offer 101", exact: true }),
+  ).toBeVisible();
+  await visitor.close();
   const sid = streams[1].id;
   let editor = offerSection(page);
   await expect(

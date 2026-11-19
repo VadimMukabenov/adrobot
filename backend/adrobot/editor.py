@@ -1,6 +1,8 @@
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from sqlalchemy import delete, select, update
@@ -51,13 +53,37 @@ class Editor:
             self._cache_offers(session, offers)
         return offers
 
+    def _visitor_url(self, alias):
+        # Only the public path is shared, never remote tokens or arbitrary URLs.
+        if self.gateway.mode == "demo" or not isinstance(alias, str):
+            return None
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", alias):
+            return None
+        try:
+            origin = urlsplit(self.gateway.url)
+            if (
+                origin.scheme not in ("https", "http")
+                or not origin.hostname
+                or origin.username is not None
+                or origin.password is not None
+            ):
+                return None
+            return f"{origin.scheme}://{origin.netloc}/{alias}"
+        except ValueError:
+            return None
+
     def list_campaigns(self):
+        observed_at = utcnow()
         campaigns = self.gateway.list_campaigns()
-        # Tokens and tracking URLs from the remote API never reach the browser.
+        # Share only our constructed public preview URL, not private remote fields.
         return [
             {
-                k: c.get(k)
-                for k in ("id", "name", "state", "domain_id", "group_id", "traffic_source_id")
+                **{
+                    k: c.get(k)
+                    for k in ("id", "name", "state", "domain_id", "group_id", "traffic_source_id")
+                },
+                "visitor_url": self._visitor_url(c.get("alias")),
+                "visitor_url_observed_at": observed_at,
             }
             for c in campaigns
         ]
@@ -75,7 +101,12 @@ class Editor:
             return dict(
                 id=campaign.id,
                 name=campaign.name,
-                **campaign.metadata_fields,
+                **{
+                    k: campaign.metadata_fields.get(k)
+                    for k in ("domain_id", "group_id", "traffic_source_id")
+                },
+                visitor_url=self._visitor_url(campaign.metadata_fields.get("alias")),
+                visitor_url_observed_at=campaign.metadata_fields.get("alias_observed_at", ""),
                 available=campaign.available,
                 writable=campaign.name.startswith(self.prefix),
                 streams=[self._view(session, s) for s in streams],
@@ -113,13 +144,16 @@ class Editor:
                 s.id: s.revision
                 for s in session.scalars(select(Stream).where(Stream.campaign_id == campaign_id))
             }
+        observed_at = utcnow()
         # No dependencies between these reads; persist only after all succeed.
         with ThreadPoolExecutor(max_workers=3) as pool:
             campaign_read = pool.submit(self.gateway.get_campaign, campaign_id)
             stream_read = pool.submit(self.gateway.list_streams, campaign_id)
             offer_read = pool.submit(self.gateway.list_offers)
             campaign, streams, offers = (
-                campaign_read.result(), stream_read.result(), offer_read.result()
+                campaign_read.result(),
+                stream_read.result(),
+                offer_read.result(),
             )
         with self.db.session.begin() as session:
             saved = session.get(Campaign, campaign_id)
@@ -128,8 +162,9 @@ class Editor:
                 session.add(saved)
             saved.name, saved.available = campaign["name"], True
             saved.metadata_fields = {
-                k: campaign.get(k) for k in ("domain_id", "group_id", "traffic_source_id")
+                k: campaign.get(k) for k in ("domain_id", "group_id", "traffic_source_id", "alias")
             }
+            saved.metadata_fields = {**saved.metadata_fields, "alias_observed_at": observed_at}
             # A complete active-offer snapshot also invalidates stale cached entries.
             active_ids = {int(o["id"]) for o in offers}
             for cached in session.scalars(select(Offer)):

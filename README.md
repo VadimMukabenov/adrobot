@@ -29,8 +29,9 @@ To use the published image without building locally:
 ## Use the editor
 
 1. Choose a campaign, or **New campaign**: selected country → Google, other visitors → an offer (destination page).
-2. Add offers and set traffic percentages. **Pin** keeps a percentage fixed; the rest is shared equally.
-3. **Publish to Keitaro** applies the draft. **Discard draft** undoes local edits; **Remove** never deletes the global offer.
+2. **Open as visitor** previews the campaign; **Copy link** lets you test it on your phone. Your country/VPN determines the destination.
+3. Add offers and set traffic percentages. **Pin** keeps a percentage fixed; the rest is shared equally.
+4. **Publish to Keitaro** applies the draft. **Discard draft** undoes local edits; **Remove** never deletes the global offer.
 
 ## Connect to real Keitaro
 

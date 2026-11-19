@@ -6,6 +6,7 @@ import type {
   Stream,
   StreamAction,
 } from "../types";
+import { VisitorLink } from "./VisitorLink";
 import { StreamEditor } from "./StreamEditor";
 
 type Props = {
@@ -60,6 +61,9 @@ export function CampaignWorkspace({
           Source: {lookupName("traffic_sources", campaign.traffic_source_id)}
         </span>
       </div>
+      {campaign.visitor_url && (
+        <VisitorLink key={campaign.visitor_url} url={campaign.visitor_url} />
+      )}
       <aside className="workflow-guide" aria-label="How to use this editor">
         <strong>Edit offer traffic in three steps</strong>
         <ol>

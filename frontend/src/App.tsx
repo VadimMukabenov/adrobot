@@ -35,6 +35,13 @@ function CampaignApp({ mode }: { mode: AppMode }) {
   const editor = useCampaignEditor(creating ? null : selected);
   const { campaign, busy, refreshing, notice, refresh, mutate, retry } = editor;
   const error = index.error || editor.error;
+  const indexedCampaign = campaigns.find((item) => item.id === campaign?.id);
+  const visitorSource =
+    indexedCampaign &&
+    (indexedCampaign.visitor_url_observed_at || "") >=
+      (campaign?.visitor_url_observed_at || "")
+      ? indexedCampaign
+      : campaign;
   return (
     <div className="app">
       <header className="app-header">
@@ -100,7 +107,10 @@ function CampaignApp({ mode }: { mode: AppMode }) {
             />
           ) : campaign ? (
             <CampaignWorkspace
-              campaign={campaign}
+              campaign={{
+                ...campaign,
+                visitor_url: visitorSource?.visitor_url,
+              }}
               lookups={lookups}
               prefix={prefix}
               busy={busy}

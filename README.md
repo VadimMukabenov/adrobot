@@ -33,6 +33,10 @@ To use the published image without building locally:
 3. Add offers and set traffic percentages. **Pin** keeps a percentage fixed; the rest is shared equally.
 4. **Publish to Keitaro** applies the draft. **Discard draft** undoes local edits; **Remove** never deletes the global offer.
 
+**Acceptance:** the four-offer workflow is checked against an isolated HTTP tracker.
+The shared live account currently exposes one offer; live multi-offer validation
+needs additional accessible offers. [Scenarios and how to repeat them](docs/acceptance.md).
+
 ## Connect to real Keitaro
 
 ```bash

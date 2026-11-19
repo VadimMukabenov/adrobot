@@ -256,6 +256,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self.drop_response()
             return self.respond(rows[rid])
 
+    def do_DELETE(self):
+        # Record forbidden deletion attempts even if application code ignores
+        # the rejection. Catalog preservation alone cannot prove no attempt.
+        with tracker.lock:
+            tracker.events.append(dict(
+                method="DELETE",
+                path=urlsplit(self.path).path.removeprefix("/admin_api/v1/"),
+                id=0,
+                body=None,
+            ))
+        return self.respond({"error": "Global deletion is forbidden in this fixture."}, 405)
+
     def do_PUT(self):
         path, data = urlsplit(self.path).path, self.body()
         if self.headers.get("Api-Key") != "e2e-local-key":

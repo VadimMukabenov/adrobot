@@ -615,3 +615,168 @@ test("removing the only offer explains blocked publication and Restore recovers 
     1,
   );
 });
+
+test("four-offer video acceptance cycle keeps pins, archives and remote state consistent", async ({
+  page,
+  request,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await open(page, request);
+  const name = "test_mukabenov_e2e_four_offers";
+  await newCampaign(page, request, name);
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  const created = (await remote(request)).campaigns.find(
+    (item) => item.name === name,
+  )!;
+  const initial = (await remote(request)).streams.filter(
+    (item) => item.campaign_id === created.id,
+  );
+  const routing = initial.find((item) => item.position === 1)!;
+  const sid = initial.find((item) => item.position === 2)!.id;
+  const editor = offerSection(page);
+  const publishedOffers = async () =>
+    (await remote(request)).streams.find((item) => item.id === sid)!.offers;
+  const publish = async () => {
+    await editor
+      .getByRole("button", { name: "Publish to Keitaro", exact: true })
+      .click();
+    await expect(
+      editor.getByText("Unpublished changes", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Published and confirmed" }),
+    ).toBeInViewport();
+  };
+  // Search by name as well as the IDs exercised in the other scenarios.
+  await editor
+    .getByRole("combobox", { name: "Search offers by ID or name" })
+    .fill("Beta");
+  await editor.getByRole("option", { name: /102/ }).click();
+  await editor.getByRole("button", { name: "Add offer", exact: true }).click();
+  await expectWeights(editor, { 101: 50, 102: 50 });
+  await chooseOffer(editor, 103, "Add offer");
+  await expectWeights(editor, { 101: 34, 102: 33, 103: 33 });
+  await chooseOffer(editor, 104, "Add offer");
+  await expectWeights(editor, { 101: 25, 102: 25, 103: 25, 104: 25 });
+  expect(await publishedOffers()).toEqual([
+    { offer_id: 101, share: 100, state: "active" },
+  ]);
+  await editor
+    .getByRole("button", { name: "Discard draft", exact: true })
+    .click();
+  await expectWeights(editor, { 101: 100 });
+  await expect(weight(editor, 102)).toHaveCount(0);
+  await expect(weight(editor, 103)).toHaveCount(0);
+  await expect(weight(editor, 104)).toHaveCount(0);
+  expect(
+    (await remote(request)).events.filter((event) => event.method === "DELETE"),
+  ).toHaveLength(0);
+  for (const id of [102, 103]) await chooseOffer(editor, id, "Add offer");
+  await weight(editor, 101).fill("25");
+  await weight(editor, 101).press("Tab");
+  await expectWeights(editor, { 101: 25, 102: 38, 103: 37 });
+  await chooseOffer(editor, 104, "Add offer");
+  await expectWeights(editor, { 101: 25, 102: 25, 103: 25, 104: 25 });
+  await expect(
+    editor.getByRole("button", { name: "Unpin offer 101", exact: true }),
+  ).toBeVisible();
+  await publish();
+  expect(await publishedOffers()).toEqual(
+    [101, 102, 103, 104].map((id) => ({
+      offer_id: id,
+      share: 25,
+      state: "active",
+    })),
+  );
+  await editor
+    .getByRole("button", { name: "Remove offer 104", exact: true })
+    .click();
+  await expectWeights(editor, { 101: 25, 102: 38, 103: 37, 104: 0 });
+  await expect(
+    editor.getByRole("button", { name: "Unpin offer 101", exact: true }),
+  ).toBeVisible();
+  expect(await publishedOffers()).toHaveLength(4);
+  await publish();
+  expect(await publishedOffers()).toEqual([
+    { offer_id: 101, share: 25, state: "active" },
+    { offer_id: 102, share: 38, state: "active" },
+    { offer_id: 103, share: 37, state: "active" },
+  ]);
+  await editor
+    .getByRole("button", { name: "Restore offer 104", exact: true })
+    .click();
+  await expectWeights(editor, { 101: 25, 102: 25, 103: 25, 104: 25 });
+  await publish();
+  expect(await publishedOffers()).toEqual([
+    { offer_id: 101, share: 25, state: "active" },
+    { offer_id: 102, share: 25, state: "active" },
+    { offer_id: 103, share: 25, state: "active" },
+    { offer_id: 104, share: 25, state: "active" },
+  ]);
+  // A marketer changes the remote association, not the global offer catalog.
+  await control(request, {
+    stream_id: sid,
+    offers: [
+      { offer_id: 101, share: 25, state: "active" },
+      { offer_id: 103, share: 38, state: "active" },
+      { offer_id: 104, share: 37, state: "active" },
+    ],
+  });
+  await page
+    .getByRole("button", { name: "Refresh from Keitaro", exact: true })
+    .click();
+  await expectWeights(editor, { 101: 25, 102: 0, 103: 38, 104: 37 });
+  await expect(
+    editor.getByRole("button", { name: "Restore offer 102", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    editor.getByRole("button", { name: "Unpin offer 101", exact: true }),
+  ).toBeVisible();
+  await editor
+    .getByRole("button", { name: "Restore offer 102", exact: true })
+    .click();
+  await expectWeights(editor, { 101: 25, 102: 25, 103: 25, 104: 25 });
+  await publish();
+  expect(await publishedOffers()).toEqual([
+    { offer_id: 101, share: 25, state: "active" },
+    { offer_id: 102, share: 25, state: "active" },
+    { offer_id: 103, share: 25, state: "active" },
+    { offer_id: 104, share: 25, state: "active" },
+  ]);
+  // Unpin and another local removal must be fully reversible by Discard.
+  await editor
+    .getByRole("button", { name: "Unpin offer 101", exact: true })
+    .click();
+  await editor
+    .getByRole("button", { name: "Remove offer 104", exact: true })
+    .click();
+  await expectWeights(editor, { 101: 34, 102: 33, 103: 33, 104: 0 });
+  await editor
+    .getByRole("button", { name: "Discard draft", exact: true })
+    .click();
+  await expectWeights(editor, { 101: 25, 102: 25, 103: 25, 104: 25 });
+  await expect(
+    editor.getByRole("button", { name: "Unpin offer 101", exact: true }),
+  ).toBeVisible();
+  const final = await remote(request);
+  expect(final.streams.find((item) => item.id === routing.id)).toEqual(routing);
+  expect(final.streams.find((item) => item.id === sid)!.offers).toEqual([
+    { offer_id: 101, share: 25, state: "active" },
+    { offer_id: 102, share: 25, state: "active" },
+    { offer_id: 103, share: 25, state: "active" },
+    { offer_id: 104, share: 25, state: "active" },
+  ]);
+  expect(writes(final, "PUT", `streams/${routing.id}`)).toHaveLength(0);
+  expect(
+    final.events.filter((event) => event.method === "DELETE"),
+  ).toHaveLength(0);
+  const catalog = await request.get(`${trackerURL}/admin_api/v1/offers`, {
+    headers: { "Api-Key": "e2e-local-key" },
+  });
+  expect(catalog.ok()).toBeTruthy();
+  expect(
+    (await catalog.json()).map((offer: { id: number }) => offer.id),
+  ).toEqual([101, 102, 103, 104]);
+  expect(errors).toEqual([]);
+});

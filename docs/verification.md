@@ -1,5 +1,13 @@
 # Verification
 
+**Current scope (19 November):** see the [acceptance checklist](acceptance.md).
+Phone routing for Singapore/Netherlands is confirmed by the candidate. Multiple
+offers are currently verified through the isolated HTTP fixture, with only one
+offer accessible on the real account. Historical configuration read-back below
+did not prove visitor routing: the Google URL field was subsequently corrected
+to canonical `action_payload`, then verified through an actual browser redirect.
+
+
 Checked on 17 November 2026 and rechecked on 18 November 2026. This document separates test results from assumptions. The first table describes the original 17 November run; the recheck below records current access limits.
 
 | Area | Evidence |

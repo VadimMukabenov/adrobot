@@ -60,6 +60,24 @@ export function CampaignWorkspace({
           Source: {lookupName("traffic_sources", campaign.traffic_source_id)}
         </span>
       </div>
+      <aside className="workflow-guide" aria-label="How to use this editor">
+        <strong>Edit offer traffic in three steps</strong>
+        <ol>
+          <li>Find an offer below and click Add offer.</li>
+          <li>
+            Set its traffic percentage, or let unpinned offers share traffic
+            equally.
+          </li>
+          <li>
+            Click Publish to Keitaro to apply the draft. Discard draft undoes
+            local edits.
+          </li>
+        </ol>
+        <p>
+          Edits are saved locally and survive reloads. Keitaro changes only when
+          you publish.
+        </p>
+      </aside>
       {!campaign.writable && (
         <p className="notice warning">
           Read only. Writing is restricted to {prefix} campaigns.

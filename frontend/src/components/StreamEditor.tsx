@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, Network } from "lucide-react";
+import { AlertTriangle, Network } from "lucide-react";
 import type { EditAction, Stream, StreamAction } from "../types";
 import { OfferSearch } from "./OfferSearch";
 import { OfferTable } from "./OfferTable";
@@ -47,7 +47,7 @@ export function StreamEditor({
                 disabled={busy}
                 onClick={() => onAction("reconcile")}
               >
-                Reconcile
+                Check publication status
               </button>
             )}
             <button
@@ -55,24 +55,20 @@ export function StreamEditor({
               disabled={busy || !writable || s.status !== "ready" || !s.dirty}
               onClick={() => onAction("cancel")}
             >
-              Cancel
+              Discard draft
             </button>
             <button
               className="button primary"
-              aria-label="Push to Keitaro"
+              aria-label="Publish to Keitaro"
               aria-busy={busy}
               disabled={blocked || !s.dirty}
               onClick={() => onAction("push")}
             >
-              {busy ? "Working…" : "Push to Keitaro"}
+              {busy ? "Working…" : "Publish to Keitaro"}
             </button>
           </div>
         ) : (
-          <ChevronDown
-            size={20}
-            className="stream-chevron"
-            aria-hidden="true"
-          />
+          null
         )}
       </div>
       {!s.available && (
@@ -92,6 +88,12 @@ export function StreamEditor({
       )}
       {s.editable ? (
         <div className="stream-body">
+          <p className="stream-help">
+            Offers are destination pages. Add or remove offers here; traffic is
+            split between them. A weight of 25% sends one quarter of this
+            stream’s traffic to that offer. Pin fixes a weight; unpinned offers
+            share the remainder.
+          </p>
           <OfferSearch
             disabled={blocked}
             onSelect={(offer) => onEdit("add", offer.id)}
@@ -110,7 +112,11 @@ export function StreamEditor({
           </div>
         </div>
       ) : (
-        <p className="no-offers">No offers. Stream settings are preserved.</p>
+        <p className="no-offers">
+          Routing stream · no offer list to edit here. Its redirects and filters
+          are managed in Keitaro and stay unchanged when you publish offer
+          edits.
+        </p>
       )}
     </section>
   );

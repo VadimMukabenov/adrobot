@@ -191,3 +191,18 @@ lead data were used or changed by this delivery's automated scenarios.
 - Independent review found no Critical or Important issues in these changes.
   Tests used isolated SQLite and a loopback tracker fixture. No new live tracker
   campaigns were created or changed for this fix.
+
+## Independent reads and workflow clarity: 19 November 2026
+
+- Creation validates independent metadata and offer reads concurrently; loading
+  the editor reads campaign, streams and offers concurrently. Both paths join
+  all reads before validation/writes or local persistence. Barrier regressions
+  first failed for the serial implementation, then passed after the change.
+- Backend: **120 tests passed** and CI-scoped Ruff passed. Frontend: **37 behavior
+  tests passed**, TypeScript/build and three real HTTP browser scenarios passed. The UI explains local drafts, traffic shares,
+  pins, offer destinations and preserved routing. Actions are named Publish to
+  Keitaro, Discard draft and Check publication status.
+- Network diagnosis on the development machine found VPN routing overhead and
+  intermittent slow Docker DNS resolution. That is environment-specific; the
+  public Compose files do not hard-code the developer's LAN/DNS configuration.
+  Controlled first-response tests are not proof of subsecond live creation.

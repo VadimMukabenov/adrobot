@@ -153,7 +153,8 @@ export function CreateCampaignForm({
       </button>
       <h1>New campaign</h1>
       <p className="muted">
-        Create a country redirect and an offer stream in Keitaro.
+        Choose where visitors go: one country goes to Google; everyone else goes
+        to your selected offer. Create campaign publishes this setup to Keitaro.
       </p>
       <form
         onSubmit={(e) => {
@@ -186,12 +187,16 @@ export function CreateCampaignForm({
             pattern="[A-Z]{2}"
             onChange={(e) => setCountry(e.target.value.toUpperCase())}
           />
-          <small>ISO country code, for example AU, DE or CA.</small>
+          <small>
+            Visitors from this country go to Google: AU = Australia, DE =
+            Germany, CA = Canada.
+          </small>
         </label>
         <div className="form-grid">
           <label>
             Domain
             <select
+              aria-label="Domain"
               required
               value={selectedDomain}
               disabled={locked}
@@ -203,10 +208,12 @@ export function CreateCampaignForm({
                 </option>
               ))}
             </select>
+            <small>Tracking link domain.</small>
           </label>
           <label>
             Group
             <select
+              aria-label="Group"
               required
               value={selectedGroup}
               disabled={locked}
@@ -218,10 +225,12 @@ export function CreateCampaignForm({
                 </option>
               ))}
             </select>
+            <small>Folder for the campaign in Keitaro.</small>
           </label>
           <label>
             Traffic source
             <select
+              aria-label="Traffic source"
               required
               value={selectedSource}
               disabled={locked}
@@ -233,10 +242,15 @@ export function CreateCampaignForm({
                 </option>
               ))}
             </select>
+            <small>Where this campaign’s visitors come from.</small>
           </label>
         </div>
         <div>
           <span className="field-label">Offer</span>
+          <p className="stream-help">
+            The destination page for visitors outside the selected country.
+            Search, then click Select offer.
+          </p>
           <OfferSearch
             disabled={locked}
             label="Select offer"

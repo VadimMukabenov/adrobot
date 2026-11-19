@@ -180,7 +180,7 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
   const sid = streams[1].id;
   let editor = offerSection(page);
   await expect(
-    page.getByText("No offers. Stream settings are preserved.", {
+    page.getByText("Routing stream · no offer list to edit here. Its redirects and filters are managed in Keitaro and stay unchanged when you publish offer edits.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -190,7 +190,7 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
   expect(
     (await remote(request)).streams.find((s) => s.id === sid)!.offers,
   ).toEqual([{ offer_id: 101, share: 100, state: "active" }]);
-  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  await editor.getByRole("button", { name: "Discard draft", exact: true }).click();
   await expect(weight(editor, 102)).toHaveCount(0);
   await expectWeights(editor, { 101: 100 });
 
@@ -214,13 +214,13 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
   await expectWeights(editor, { 101: 25, 102: 38, 103: 37 });
   await expect(editor.getByText("Unpublished changes")).toBeVisible();
   await editor
-    .getByRole("button", { name: "Push to Keitaro", exact: true })
+    .getByRole("button", { name: "Publish to Keitaro", exact: true })
     .click();
   await expect(
-    editor.getByRole("button", { name: "Push to Keitaro", exact: true }),
+    editor.getByRole("button", { name: "Publish to Keitaro", exact: true }),
   ).toBeDisabled();
   await expect(
-    editor.getByRole("button", { name: "Push to Keitaro", exact: true }),
+    editor.getByRole("button", { name: "Publish to Keitaro", exact: true }),
   ).toHaveAttribute("aria-busy", "false");
   await expect(
     editor.getByText("Unpublished changes", { exact: true }),
@@ -238,13 +238,13 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
     .click();
   await expectWeights(editor, { 101: 25, 102: 0, 103: 75 });
   await editor
-    .getByRole("button", { name: "Push to Keitaro", exact: true })
+    .getByRole("button", { name: "Publish to Keitaro", exact: true })
     .click();
   await expect(
-    editor.getByRole("button", { name: "Push to Keitaro", exact: true }),
+    editor.getByRole("button", { name: "Publish to Keitaro", exact: true }),
   ).toBeDisabled();
   await expect(
-    editor.getByRole("button", { name: "Push to Keitaro", exact: true }),
+    editor.getByRole("button", { name: "Publish to Keitaro", exact: true }),
   ).toHaveAttribute("aria-busy", "false");
   await expect(
     editor.getByText("Unpublished changes", { exact: true }),
@@ -259,13 +259,13 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
     .click();
   await expectWeights(editor, { 101: 25, 102: 38, 103: 37 });
   await editor
-    .getByRole("button", { name: "Push to Keitaro", exact: true })
+    .getByRole("button", { name: "Publish to Keitaro", exact: true })
     .click();
   await expect(
-    editor.getByRole("button", { name: "Push to Keitaro", exact: true }),
+    editor.getByRole("button", { name: "Publish to Keitaro", exact: true }),
   ).toBeDisabled();
   await expect(
-    editor.getByRole("button", { name: "Push to Keitaro", exact: true }),
+    editor.getByRole("button", { name: "Publish to Keitaro", exact: true }),
   ).toHaveAttribute("aria-busy", "false");
   await expect(
     editor.getByText("Unpublished changes", { exact: true }),
@@ -285,16 +285,16 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
     `streams/${sid}`,
   ).length;
   await editor
-    .getByRole("button", { name: "Push to Keitaro", exact: true })
+    .getByRole("button", { name: "Publish to Keitaro", exact: true })
     .click();
   await expect(page.getByRole("alert")).toContainText("changed externally");
   await expectWeights(editor, { 101: 30, 102: 35, 103: 35 });
   expect(writes(await remote(request), "PUT", `streams/${sid}`)).toHaveLength(
     beforeConflict,
   );
-  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  await editor.getByRole("button", { name: "Discard draft", exact: true }).click();
   await expect(
-    editor.getByRole("button", { name: "Cancel", exact: true }),
+    editor.getByRole("button", { name: "Discard draft", exact: true }),
   ).toBeDisabled();
   await page
     .getByRole("button", { name: "Refresh from Keitaro", exact: true })
@@ -314,7 +314,7 @@ test("clean setup, late lookups and the full persistent editor scenario use the 
   ).length;
   await control(request, { drop_update: true });
   await editor
-    .getByRole("button", { name: "Push to Keitaro", exact: true })
+    .getByRole("button", { name: "Publish to Keitaro", exact: true })
     .click();
   await expect(
     page.getByRole("status").filter({ hasText: "Published" }),
@@ -407,10 +407,10 @@ test("an accepted write with unavailable read-back keeps the draft locked until 
   await control(request, { drop_update: true, fail_read_after_update: true });
   const before = writes(await remote(request), "PUT", "streams/1002").length;
   await editor
-    .getByRole("button", { name: "Push to Keitaro", exact: true })
+    .getByRole("button", { name: "Publish to Keitaro", exact: true })
     .click();
   await expect(
-    editor.getByRole("button", { name: "Reconcile", exact: true }),
+    editor.getByRole("button", { name: "Check publication status", exact: true }),
   ).toBeVisible();
   await expect(
     editor.getByRole("button", { name: "Remove offer 101", exact: true }),
@@ -420,13 +420,13 @@ test("an accepted write with unavailable read-back keeps the draft locked until 
   );
   await page.reload();
   await expect(
-    offerSection(page).getByRole("button", { name: "Reconcile", exact: true }),
+    offerSection(page).getByRole("button", { name: "Check publication status", exact: true }),
   ).toBeVisible();
   await offerSection(page)
-    .getByRole("button", { name: "Reconcile", exact: true })
+    .getByRole("button", { name: "Check publication status", exact: true })
     .click();
   await expect(
-    offerSection(page).getByRole("button", { name: "Reconcile", exact: true }),
+    offerSection(page).getByRole("button", { name: "Check publication status", exact: true }),
   ).toHaveCount(0);
   await expect(
     offerSection(page).getByRole("button", {

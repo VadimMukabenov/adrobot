@@ -41,7 +41,7 @@ A FastAPI + SQLAlchemy + React editor for Keitaro campaigns. Create two-stream c
 - Campaign creator with a country redirect to Google and a default offer stream; domain, campaign group and traffic source come from Keitaro.
 - Offer search by ID or name. Add, remove, restore, pin/unpin, and edit a pinned integer weight.
 - Persistent SQL drafts: browser/backend restarts do not publish or erase edits.
-- Explicit **Push to Keitaro** and **Cancel**. Removed links stay in a local archive; global offers are never deleted.
+- Explicit **Publish to Keitaro** and **Discard draft**. Removed links stay in a local archive; global offers are never deleted.
 - Refresh imports external changes and archives disappeared offers. It refuses to overwrite an unfinished local draft.
 - Deterministic integer allocation with an exact total of 100%, optimistic local revisions, remote-change detection, and read-back verification after writes.
 - Interrupted creation records its alias, operation ID and stage. Retrying the same operation reconciles existing resources instead of blindly creating another campaign.
@@ -58,7 +58,7 @@ A FastAPI + SQLAlchemy + React editor for Keitaro campaigns. Create two-stream c
 2. Use a name starting with `test_mukabenov_`, choose the country and existing
    metadata/offer, then create. This writes a real test campaign to Keitaro.
 3. Open its offer stream. Add/Remove/Pin change only the local draft;
-   **Push to Keitaro** publishes and **Cancel** discards unpublished edits.
+   **Publish to Keitaro** publishes and **Discard draft** discards unpublished edits.
 
 | Symptom | What to check |
 |---|---|
@@ -134,7 +134,7 @@ The initial migration creates campaigns, streams, offers, unique stream-offer as
 3. Search and select an existing offer, then **Add offer**. A yellow header means unpublished changes.
 4. **Remove** archives the association locally and gives it 0%. The offer remains in the global Keitaro catalogue. **Restore** brings it back into the draft.
 5. **Pin** fixes the current weight. Editing a weight also pins it; **Unpin** returns it to equal sharing.
-6. **Push to Keitaro** updates only the offer list of that stream and then reads it back. **Cancel** restores the last confirmed snapshot, including weights and pins; new unpublished associations disappear.
+6. **Publish to Keitaro** updates only the offer list of that stream and then reads it back. **Discard draft** restores the last confirmed snapshot, including weights and pins; new unpublished associations disappear.
 
 If an offer is removed directly in Keitaro, Refresh archives its known local association. If an externally edited weight contradicts a local pin, Refresh accepts the remote weight and clears that pin with a message. Refresh imports actual remote weights without silently normalizing them; the next explicit edit recalculates them.
 
@@ -158,7 +158,7 @@ Keitaro does not provide a documented atomic compare-and-swap for this operation
 
 If a stream is confirmed missing in Keitaro, its local history and draft are retained, publishing is disabled, and Cancel allows the remaining campaign to be refreshed. Unavailable global offers cannot be restored.
 
-If a write response is lost, read-back may confirm that it succeeded. Otherwise the draft stays available, or the stream enters an **uncertain** state and offers **Reconcile**. Never assume a timeout means nothing happened.
+If a write response is lost, read-back may confirm that it succeeded. Otherwise the draft stays available, or the stream enters an **uncertain** state and offers **Check publication status**. Never assume a timeout means nothing happened.
 
 If the application process itself stopped during a write, **stop all workers**
 and recover against the same database. For the recommended Docker launch:
@@ -170,7 +170,7 @@ docker compose up --wait
 ```
 
 This uses the existing Docker volume; no host Python/uv is needed. It marks
-interrupted writes **uncertain**, without contacting Keitaro. Then use Reconcile
+interrupted writes **uncertain**, without contacting Keitaro. Then use Check publication status
 in the UI, or resume saved creation through **New campaign**. Recovery does not
 claim a remote success. A creation whose identity/configuration cannot be
 reconciled remains incomplete for manual inspection.

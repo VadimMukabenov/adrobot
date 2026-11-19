@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from uuid import uuid4
 
@@ -112,9 +113,14 @@ class Editor:
                 s.id: s.revision
                 for s in session.scalars(select(Stream).where(Stream.campaign_id == campaign_id))
             }
-        campaign = self.gateway.get_campaign(campaign_id)
-        streams = self.gateway.list_streams(campaign_id)
-        offers = self.gateway.list_offers()
+        # No dependencies between these reads; persist only after all succeed.
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            campaign_read = pool.submit(self.gateway.get_campaign, campaign_id)
+            stream_read = pool.submit(self.gateway.list_streams, campaign_id)
+            offer_read = pool.submit(self.gateway.list_offers)
+            campaign, streams, offers = (
+                campaign_read.result(), stream_read.result(), offer_read.result()
+            )
         with self.db.session.begin() as session:
             saved = session.get(Campaign, campaign_id)
             if saved is None:

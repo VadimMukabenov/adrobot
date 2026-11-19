@@ -18,6 +18,27 @@ def edit(client, action, offer_id, **fields):
     )
 
 
+def test_refresh_reads_independent_remote_resources_concurrently(setup):
+    from threading import Barrier
+
+    client, remote, *_ = setup
+    gate = Barrier(3, timeout=2)
+
+    def concurrent(method):
+        def read(*args):
+            gate.wait()
+            return method(*args)
+        return read
+
+    remote.get_campaign = concurrent(remote.get_campaign)
+    remote.list_streams = concurrent(remote.list_streams)
+    remote.list_offers = concurrent(remote.list_offers)
+    result = client.post("/api/campaigns/7/fetch")
+    assert result.status_code == 200
+    assert result.json()["name"] == "test_mukabenov_demo"
+    assert len(result.json()["streams"]) == 2
+
+
 def test_add_is_only_local_and_survives_an_application_restart(setup):
     c, remote, settings, db = setup
     assert edit(c, "add", 4).status_code == 200

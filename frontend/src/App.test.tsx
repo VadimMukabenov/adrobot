@@ -136,7 +136,7 @@ it("does not show an old mutation failure or reload it into a new campaign", asy
   );
   render(<App />);
   fireEvent.click(
-    await screen.findByRole("button", { name: "Push to Keitaro" }),
+    await screen.findByRole("button", { name: "Publish to Keitaro" }),
   );
   fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_2" }));
   await screen.findByRole("heading", { name: "test_mukabenov_2" });
@@ -159,7 +159,7 @@ it("ignores a mutation success after leaving and returning to the same campaign"
   });
   render(<App />);
   fireEvent.click(
-    await screen.findByRole("button", { name: "Push to Keitaro" }),
+    await screen.findByRole("button", { name: "Publish to Keitaro" }),
   );
   fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_2" }));
   await screen.findByRole("heading", { name: "test_mukabenov_2" });
@@ -168,7 +168,7 @@ it("ignores a mutation success after leaving and returning to the same campaign"
   await act(async () =>
     mutation.resolve(response({ ...campaign(1).streams[0], dirty: false })),
   );
-  expect(screen.getByRole("button", { name: "Push to Keitaro" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Publish to Keitaro" })).toBeEnabled();
   expect(screen.getByText("Unpublished changes")).toBeInTheDocument();
   expect(
     screen.queryByText("Published and confirmed in Keitaro."),
@@ -192,7 +192,7 @@ it.each(["success", "failure"])(
     });
     render(<App />);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Push to Keitaro" }),
+      await screen.findByRole("button", { name: "Publish to Keitaro" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_2" }));
     await screen.findByRole("heading", { name: "test_mukabenov_2" });
@@ -207,7 +207,7 @@ it.each(["success", "failure"])(
     );
     await waitFor(() => expect(reads).toBe(3));
     expect(
-      screen.getByRole("button", { name: "Push to Keitaro" }),
+      screen.getByRole("button", { name: "Publish to Keitaro" }),
     ).toHaveAttribute("aria-busy", "true");
     expect(
       screen.getByRole("button", { name: "Refresh from Keitaro" }),
@@ -220,7 +220,7 @@ it.each(["success", "failure"])(
       screen.queryByText("Publication is running. Editing is locked."),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Push to Keitaro" }),
+      screen.getByRole("button", { name: "Publish to Keitaro" }),
     ).toHaveAttribute("aria-busy", "false");
     expect(
       screen.getByRole("button", { name: "Refresh from Keitaro" }),
@@ -231,7 +231,7 @@ it.each(["success", "failure"])(
         screen.queryByText("Published and confirmed in Keitaro."),
       ).not.toBeInTheDocument();
     } else {
-      expect(screen.getByRole("button", { name: "Reconcile" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Check publication status" })).toBeEnabled();
       expect(screen.getByRole("alert")).toHaveTextContent("Response lost");
     }
     expect(
@@ -257,7 +257,7 @@ it.each([200, 404])(
     });
     render(<App />);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Push to Keitaro" }),
+      await screen.findByRole("button", { name: "Publish to Keitaro" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_2" }));
     await screen.findByRole("heading", { name: "test_mukabenov_2" });
@@ -291,7 +291,7 @@ it("ignores settled push read-back after navigating to another campaign", async 
   });
   render(<App />);
   fireEvent.click(
-    await screen.findByRole("button", { name: "Push to Keitaro" }),
+    await screen.findByRole("button", { name: "Publish to Keitaro" }),
   );
   fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_2" }));
   await screen.findByRole("heading", { name: "test_mukabenov_2" });
@@ -317,7 +317,7 @@ it("sends only one mutation when two events happen before controls re-render", a
     url === "/api/streams/10/push" ? mutation.promise : undefined,
   );
   render(<App />);
-  const push = await screen.findByRole("button", { name: "Push to Keitaro" });
+  const push = await screen.findByRole("button", { name: "Publish to Keitaro" });
   act(() => {
     push.click();
     push.click();
@@ -329,7 +329,7 @@ it("sends only one mutation when two events happen before controls re-render", a
     mutation.resolve(response({ ...campaign(1).streams[0], dirty: false })),
   );
   expect(
-    screen.getByRole("button", { name: "Push to Keitaro" }),
+    screen.getByRole("button", { name: "Publish to Keitaro" }),
   ).toBeDisabled();
 });
 
@@ -470,7 +470,7 @@ it("keeps an in-flight mutation on another campaign from blocking the current re
   );
   render(<App />);
   fireEvent.click(
-    await screen.findByRole("button", { name: "Push to Keitaro" }),
+    await screen.findByRole("button", { name: "Publish to Keitaro" }),
   );
   fireEvent.click(screen.getByRole("button", { name: "test_mukabenov_2" }));
   await screen.findByRole("heading", { name: "test_mukabenov_2" });
@@ -557,12 +557,12 @@ it("reads back an uncertain mutation without automatically repeating the write",
   });
   render(<App />);
   fireEvent.click(
-    await screen.findByRole("button", { name: "Push to Keitaro" }),
+    await screen.findByRole("button", { name: "Publish to Keitaro" }),
   );
-  await screen.findByRole("button", { name: "Reconcile" });
+  await screen.findByRole("button", { name: "Check publication status" });
   expect(screen.getByRole("alert")).toHaveTextContent("Response lost");
   expect(
-    screen.getByRole("button", { name: "Push to Keitaro" }),
+    screen.getByRole("button", { name: "Publish to Keitaro" }),
   ).toBeDisabled();
   expect(
     fetch.mock.calls.filter(([url]) => url === "/api/streams/10/push"),

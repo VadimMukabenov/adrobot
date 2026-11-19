@@ -109,7 +109,12 @@ function CampaignApp({ mode }: { mode: AppMode }) {
               <div className="empty-state">
                 <Layers size={36} />
                 <h1>{selected ? "Loading campaign…" : "Choose a campaign"}</h1>
-                <p>Select an existing campaign or create one to get started.</p>
+                <p>
+                  Choose a campaign on the left to change how its traffic is
+                  split between offers (destination pages). New campaign creates
+                  a country redirect to Google and an offer for all other
+                  visitors.
+                </p>
               </div>
             )
           )}

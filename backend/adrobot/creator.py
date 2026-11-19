@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from sqlalchemy import update
@@ -168,7 +169,11 @@ class Creator:
         return self.operation(request.operation_id)
 
     def _validate_dependencies(self, request, payload):
-        lookups = self.gateway.lookups()
+        # These reads are independent. Complete both before any remote write.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            lookup_read = pool.submit(self.gateway.lookups)
+            offer_read = pool.submit(self.gateway.list_offers, str(request.offer_id))
+            lookups, offers = lookup_read.result(), offer_read.result()
         for field, group in [
             ("domain_id", "domains"),
             ("group_id", "groups"),
@@ -176,9 +181,7 @@ class Creator:
         ]:
             if payload[field] not in {o["id"] for o in lookups[group]}:
                 raise AppError(422, f"The selected {field} is unavailable in Keitaro.")
-        if not any(
-            o["id"] == request.offer_id for o in self.gateway.list_offers(str(request.offer_id))
-        ):
+        if not any(o["id"] == request.offer_id for o in offers):
             raise AppError(422, "The selected offer is unavailable in Keitaro.")
 
     @staticmethod

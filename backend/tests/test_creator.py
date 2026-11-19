@@ -14,6 +14,28 @@ def body(**overrides):
     )
 
 
+def test_creation_checks_independent_dependencies_concurrently_before_any_write(setup):
+    from threading import Barrier
+
+    client, remote, *_ = setup
+    gate = Barrier(2, timeout=2)
+    lookups, offers = remote.lookups, remote.list_offers
+
+    def blocked_lookups():
+        gate.wait()
+        return lookups()
+
+    def blocked_offers(query=""):
+        gate.wait()
+        return offers(query)
+
+    remote.lookups, remote.list_offers = blocked_lookups, blocked_offers
+    result = client.post("/api/campaigns", json=body())
+    assert result.status_code == 200
+    assert result.json()["status"] == "confirmed"
+    assert len(remote.campaigns) == 2
+
+
 def test_fresh_creation_does_not_wait_for_unrelated_campaign_pagination(setup):
     client, remote, *_ = setup
 

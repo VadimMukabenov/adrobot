@@ -73,7 +73,7 @@ describe("stream actions", () => {
       screen.getByRole("button", { name: "Remove offer 1" }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: /push to keitaro/i }),
+      screen.getByRole("button", { name: /publish to keitaro/i }),
     ).toBeDisabled();
   });
   it("shows errors and exposes reconciliation for uncertain remote outcomes", () => {
@@ -93,7 +93,7 @@ describe("stream actions", () => {
       />,
     );
     expect(screen.getByText("Remote result is unknown.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /reconcile/i }));
+    fireEvent.click(screen.getByRole("button", { name: /check publication status/i }));
     expect(action).toHaveBeenCalledWith("reconcile");
     expect(
       screen.getByRole("button", { name: "Remove offer 1" }),
@@ -111,10 +111,10 @@ describe("stream actions", () => {
       />,
     );
     expect(
-      screen.getByText("No offers. Stream settings are preserved."),
+      screen.getByText(/Routing stream · no offer list to edit here/),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /push to keitaro/i }),
+      screen.queryByRole("button", { name: /publish to keitaro/i }),
     ).not.toBeInTheDocument();
   });
 });
@@ -132,8 +132,8 @@ it("allows local Cancel for a deleted stream while retaining the draft and block
     />,
   );
   expect(
-    screen.getByRole("button", { name: /push to keitaro/i }),
+    screen.getByRole("button", { name: /publish to keitaro/i }),
   ).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
   expect(action).toHaveBeenCalledWith("cancel");
 });

@@ -285,3 +285,55 @@ def test_demo_rejects_ambiguous_application_sqlite_urls(application_url, tmp_pat
             database_url=application_url,
             demo_database_url=f"sqlite:///{tmp_path / 'demo.db'}",
         )
+
+
+@pytest.mark.parametrize("source", ["explicit-file", "default-file"])
+def test_dotenv_alone_cannot_select_demo_and_import_live_configuration(
+    tmp_path, monkeypatch, source
+):
+    for name in ("APP_MODE", "DATABASE_URL", "KEITARO_API_KEY", "DEMO_DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    live_database = tmp_path / "live.db"
+    live_database.write_bytes(b"synthetic-live-database-placeholder")
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(
+        f"APP_MODE=demo\nDATABASE_URL=sqlite:///{live_database}\n"
+        "KEITARO_API_KEY=synthetic-review-marker\n"
+    )
+    if source == "default-file":
+        monkeypatch.setitem(Settings.model_config, "env_file", dotenv)
+        arguments = {}
+    else:
+        arguments = {"_env_file": dotenv}
+    with pytest.raises(ValueError, match="APP_MODE") as rejected:
+        Settings(**arguments)
+    assert "synthetic-review-marker" not in str(rejected.value)
+    assert live_database.read_bytes() == b"synthetic-live-database-placeholder"
+    assert sorted(path.name for path in tmp_path.iterdir()) == [".env", "live.db"]
+
+
+@pytest.mark.parametrize("source", ["constructor", "process"])
+@pytest.mark.parametrize("mode", ["live", "demo"])
+def test_explicit_mode_overrides_dotenv_selection_without_changing_live_loading(
+    tmp_path, monkeypatch, source, mode
+):
+    for name in ("APP_MODE", "DATABASE_URL", "KEITARO_API_KEY", "DEMO_DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(
+        "APP_MODE=demo\nDATABASE_URL=sqlite:///synthetic-live.db\n"
+        "KEITARO_API_KEY=synthetic-review-marker\n"
+    )
+    arguments = {"_env_file": dotenv}
+    if source == "constructor":
+        arguments["app_mode"] = mode
+    else:
+        monkeypatch.setenv("APP_MODE", mode)
+    settings = Settings(**arguments)
+    assert settings.app_mode == mode
+    if mode == "live":
+        assert settings.database_url == "sqlite:///synthetic-live.db"
+        assert settings.keitaro_api_key.get_secret_value() == "synthetic-review-marker"
+    else:
+        assert settings.database_url == "sqlite:///./adrobot-demo.db"
+        assert settings.keitaro_api_key.get_secret_value() == ""

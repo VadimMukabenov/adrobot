@@ -50,6 +50,11 @@ export function CreateCampaignForm({
   const [source, setSource] = useState(
     String(saved?.traffic_source_id || lookups.traffic_sources[0]?.id || ""),
   );
+  // Options can arrive after the form opens; use the same defaults in the
+  // controls and the submitted payload.
+  const selectedDomain = domain || String(lookups.domains[0]?.id || "");
+  const selectedGroup = group || String(lookups.groups[0]?.id || "");
+  const selectedSource = source || String(lookups.traffic_sources[0]?.id || "");
   const [offer, setOffer] = useState<Offer | null>(
     saved
       ? { id: saved.offer_id, name: `Offer ${saved.offer_id}`, state: "active" }
@@ -63,9 +68,9 @@ export function CreateCampaignForm({
     const payload = request || {
       name,
       country: country.trim().toUpperCase(),
-      domain_id: Number(domain),
-      group_id: Number(group),
-      traffic_source_id: Number(source),
+      domain_id: Number(selectedDomain),
+      group_id: Number(selectedGroup),
+      traffic_source_id: Number(selectedSource),
       offer_id: offer!.id,
       operation_id: crypto.randomUUID(),
     };
@@ -126,9 +131,13 @@ export function CreateCampaignForm({
             value={name}
             disabled={locked}
             minLength={prefix.length + 1}
+            aria-describedby="campaign-name-help"
             onChange={(e) => setName(e.target.value)}
           />
         </label>
+        <small id="campaign-name-help">
+          Add a name after {prefix}, for example {prefix}demo.
+        </small>
         <label>
           Country code
           <input
@@ -146,7 +155,7 @@ export function CreateCampaignForm({
             Domain
             <select
               required
-              value={domain}
+              value={selectedDomain}
               disabled={locked}
               onChange={(e) => setDomain(e.target.value)}
             >
@@ -161,7 +170,7 @@ export function CreateCampaignForm({
             Group
             <select
               required
-              value={group}
+              value={selectedGroup}
               disabled={locked}
               onChange={(e) => setGroup(e.target.value)}
             >
@@ -176,7 +185,7 @@ export function CreateCampaignForm({
             Traffic source
             <select
               required
-              value={source}
+              value={selectedSource}
               disabled={locked}
               onChange={(e) => setSource(e.target.value)}
             >
@@ -226,10 +235,22 @@ export function CreateCampaignForm({
             </small>
           </div>
         )}
+        {(!selectedDomain || !selectedGroup || !selectedSource) && (
+          <p className="muted" role="status">
+            Waiting for campaign options. If the lists stay empty, return to
+            campaigns and retry loading.
+          </p>
+        )}
         <button
           type="submit"
           className="button primary"
-          disabled={busy || !offer || !domain || !group || !source}
+          disabled={
+            busy ||
+            !offer ||
+            !selectedDomain ||
+            !selectedGroup ||
+            !selectedSource
+          }
         >
           {busy && <LoaderCircle size={18} className="spin" />}
           {request ? "Reconcile and resume this creation" : "Create campaign"}

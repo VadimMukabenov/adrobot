@@ -111,3 +111,50 @@ it("retains an existing operation after validation error instead of starting ano
   ).toBe(pending.operation_id);
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+it("uses options that arrive after opening the form when creating a campaign", async () => {
+  const onCreated = vi.fn();
+  let submitted: unknown;
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
+    if (url === "/api/offers?q=20")
+      return new Response(
+        JSON.stringify([{ id: 20, name: "Demo offer", state: "active" }]),
+      );
+    if (url === "/api/campaigns" && options?.method === "POST") {
+      submitted = JSON.parse(String(options.body));
+      return new Response(
+        JSON.stringify({ status: "confirmed", campaign_id: 81 }),
+      );
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const props = { prefix: "test_demo_", onBack: vi.fn(), onCreated };
+  const { rerender } = render(
+    <CreateCampaignForm
+      {...props}
+      lookups={{ domains: [], groups: [], traffic_sources: [] }}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("Campaign name"), {
+    target: { value: "test_demo_launch" },
+  });
+  rerender(<CreateCampaignForm {...props} lookups={lookups} />);
+  fireEvent.change(
+    screen.getByRole("combobox", { name: "Search offers by ID or name" }),
+    { target: { value: "20" } },
+  );
+  fireEvent.click(await screen.findByRole("option", { name: /Demo offer/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Select offer" }));
+  const create = screen.getByRole("button", { name: "Create campaign" });
+  expect(create).toBeEnabled();
+  fireEvent.click(create);
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith(81));
+  expect(submitted).toMatchObject({
+    name: "test_demo_launch",
+    country: "AU",
+    domain_id: 1,
+    group_id: 2,
+    traffic_source_id: 3,
+    offer_id: 20,
+  });
+});

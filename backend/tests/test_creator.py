@@ -182,6 +182,27 @@ def test_lost_creation_response_reconciles_by_alias_without_duplicate_campaign(s
     assert len(remote.list_streams(8)) == 2
 
 
+def test_resume_confirms_lost_activation_response_without_writing_activation_again(setup):
+    client, remote, *_ = setup
+    original = remote.update_campaign
+    writes = []
+
+    def accepted_but_response_lost(campaign_id, payload):
+        writes.append((campaign_id, payload))
+        original(campaign_id, payload)
+        raise TimeoutError("activation was accepted but its response was lost")
+
+    remote.update_campaign = accepted_but_response_lost
+    first = client.post("/api/campaigns", json=body())
+    assert first.json()["phase"] == "enabling_campaign"
+    assert first.json()["status"] == "uncertain"
+    assert remote.get_campaign(first.json()["campaign_id"])["state"] == "active"
+    resumed = client.post("/api/campaigns", json=body())
+    assert resumed.status_code == 200
+    assert resumed.json()["status"] == "confirmed"
+    assert len(writes) == 1
+
+
 def test_partial_creation_stays_disabled_and_retry_does_not_duplicate_first_stream(setup):
     c, remote, *_ = setup
     remote.fail_second_stream = True

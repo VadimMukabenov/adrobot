@@ -150,7 +150,10 @@ class Creator:
             ):
                 raise AppError(409, "Campaign settings do not match the creation request.")
             self._stage(request.operation_id, "enabling_campaign")
-            self.gateway.update_campaign(campaign_id, {"state": "active"})
+            # A lost activation response can already have changed remote state.
+            # Reuse the verified read instead of sending the same write again.
+            if campaign.get("state") != "active":
+                self.gateway.update_campaign(campaign_id, {"state": "active"})
             if self.gateway.get_campaign(campaign_id).get("state") != "active":
                 raise AppError(502, "Campaign activation is not confirmed.")
             with self.db.session.begin() as session:

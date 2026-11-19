@@ -9,8 +9,9 @@ docker compose version >/dev/null
 docker info >/dev/null 2>&1 || fail 'Start Docker and allow this OS user to access it, then retry.'
 
 if [ ! -f .env ]; then
-  printf '%s\n' 'Open the real Keitaro link provided in the assignment. Copy its browser URL.'
-  read -r -p 'Paste your Keitaro admin URL: ' tracker
+  printf '%s\n' 'Test Keitaro: https://tlgk.host/admin/'
+  read -r -p 'Keitaro URL [https://tlgk.host] — press Enter for the test tracker: ' tracker
+  tracker=${tracker:-https://tlgk.host}
   [[ "$tracker" =~ ^(https?://[^/?#@[:space:]]+)([/?#][^[:space:]]*)?$ ]] || fail 'Paste the full http:// or https:// URL of your real Keitaro page.'
   tracker=${BASH_REMATCH[1]}
   host=$(printf '%s' "${tracker#*://}" | tr '[:upper:]' '[:lower:]')
@@ -18,7 +19,7 @@ if [ ! -f .env ]; then
   host=${host%.}
   case "$host" in
     example.com|*.example.com|example.org|*.example.org|example.net|*.example.net|example|*.example|invalid|*.invalid)
-      fail 'This is an example address, not your tracker. Use the real Keitaro link from the assignment.' ;;
+      fail 'This is an example address, not your tracker. Use https://tlgk.host for this test or paste your own real tracker URL.' ;;
   esac
   printf 'Tracker: %s\n' "$tracker"
   printf '%s\n' 'In Keitaro: account icon -> Account -> API keys. Copy the existing Admin API key.'

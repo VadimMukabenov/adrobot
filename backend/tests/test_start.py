@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 def test_start_uses_its_own_project_and_preserves_existing_settings(tmp_path):
     repo = tmp_path / "adrobot clone"
@@ -63,7 +65,12 @@ def test_first_start_hides_key_and_writes_private_parseable_configuration(tmp_pa
     assert key not in result.stdout + result.stderr
 
 
-def test_start_accepts_the_whole_admin_page_url(tmp_path):
+@pytest.mark.parametrize(
+    ("address", "origin"),
+    [("https://localhost:9443/admin/#!/campaigns", "https://localhost:9443"),
+     ("", "https://tlgk.host")],
+)
+def test_start_accepts_admin_url_or_enter_for_test_tracker(tmp_path, address, origin):
     from adrobot.settings import Settings
 
     repo = tmp_path / "clone"
@@ -79,11 +86,11 @@ def test_start_accepts_the_whole_admin_page_url(tmp_path):
     docker.chmod(0o755)
     result = subprocess.run(
         ["bash", str(repo / "start")], cwd=tmp_path, text=True, capture_output=True,
-        input="https://localhost:9443/admin/#!/campaigns\nsynthetic-key\n",
+        input=address + "\nsynthetic-key\n",
         env={**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"]},
     )
     assert result.returncode == 0, result.stderr
-    assert Settings(_env_file=repo / ".env").keitaro_base_url == "https://localhost:9443"
+    assert Settings(_env_file=repo / ".env").keitaro_base_url == origin
 
 
 def test_start_rejects_example_address_without_saving_configuration(tmp_path):

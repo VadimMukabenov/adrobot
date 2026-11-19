@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+fail() { printf '%s\n' "$1" >&2; exit 1; }
+test -f compose.yaml || fail 'The start script must stay inside the Adrobot clone.'
+command -v docker >/dev/null || fail 'Install Docker with Compose v2.20+ first.'
+docker compose version >/dev/null
+docker info >/dev/null
+
+if [ ! -f .env ]; then
+  read -r -p 'Keitaro address (https://tracker.example): ' tracker
+  tracker=${tracker%/}
+  [[ "$tracker" =~ ^https?://[^/?#@[:space:]]+$ ]] || fail 'Enter only the tracker origin, without /admin.'
+  read -r -s -p 'Keitaro Admin API key (hidden): ' api_key
+  printf '\n'
+  test -n "$api_key" || fail 'The Admin API key cannot be empty.'
+  case "$tracker$api_key" in
+    *'\'*|*'${'*) fail 'Use the literal tracker address and API key, without escaping or ${...}.' ;;
+  esac
+  dotenv_value() {
+    local value="$1"
+    value=${value//\'/\\\'}
+    printf "'%s'" "$value"
+  }
+  umask 077
+  (
+    set -o noclobber
+    {
+      printf 'KEITARO_BASE_URL='; dotenv_value "$tracker"; printf '\n'
+      printf 'KEITARO_API_KEY='; dotenv_value "$api_key"; printf '\n'
+      printf '%s\n' 'DATABASE_URL=sqlite:///./adrobot.db' 'CAMPAIGN_PREFIX=test_mukabenov_'
+    } > .env
+  )
+  unset api_key
+fi
+
+docker compose up --build --wait
+address=$(docker compose port app 8765)
+printf '\nAdrobot: http://%s/\n' "$address"

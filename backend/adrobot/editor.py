@@ -297,6 +297,7 @@ class Editor:
             desired = [
                 dict(offer_id=r["offer_id"], share=r["share"], state="active") for r in active
             ]
+            campaign_id = stream.campaign_id
             baseline = stream.remote_fingerprint
             operation = Operation(
                 id=str(uuid4()),
@@ -309,7 +310,14 @@ class Editor:
         status, error, final_fingerprint, missing = "ready", None, None, False
         try:
             current = self.gateway.get_stream(stream_id)
-            if fingerprint(current.get("offers", [])) == fingerprint(desired):
+            remote_campaign = self.gateway.get_campaign(campaign_id)
+            if current.get("campaign_id") != campaign_id:
+                error = AppError(409, "Stream moved to another campaign. Draft retained.")
+            elif not remote_campaign["name"].startswith(self.prefix):
+                error = AppError(
+                    403, "Campaign no longer has the configured test prefix. Draft retained."
+                )
+            elif fingerprint(current.get("offers", [])) == fingerprint(desired):
                 final_fingerprint = fingerprint(desired)  # previous response may have been lost
             elif fingerprint(current.get("offers", [])) != baseline:
                 error = AppError(

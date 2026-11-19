@@ -50,3 +50,33 @@ The desktop result was visually compared with the generated concept at matching 
 - Fresh dependency audit: production dependencies have zero reported vulnerabilities; six high-severity development-tool entries remain under the advisory above. No forced dependency downgrade was applied.
 
 Temporary QA scripts, synthetic fixtures, databases and screenshots are excluded from the source deliverable. No paid traffic, real lead data or advertising conversions were used in this recheck.
+
+## Simplified reviewer launch — 19 November 2026
+
+- Executed `start` from `/tmp` against a fresh source copy in a directory with
+  spaces, no `.env`, and an empty dedicated Docker volume. Entered synthetic
+  tracker/key values. It built the image, migrated SQLite, reached Docker
+  `healthy`, and printed the actual isolated URL (host port 18770).
+- Repeated Compose startup and checked HTTP 200 for health, compiled React and
+  API docs. Alembic `current`/`check` confirmed the migration head with no drift.
+  The container ran as UID/GID 10001. A sentinel survived `down`/`up` without
+  deleting the volume. Docker recovery changed a synthetic persisted `running`
+  operation to `uncertain` on that same volume, with the worker stopped.
+- Launcher tests cover a foreign working directory, path spaces, preservation of
+  an existing `.env`, hidden key handling, quote-safe dotenv parsing and mode
+  0600. Empty Compose API-key configuration was rejected before startup.
+- Backend: **59 tests passed**, Ruff passed. Frontend: **8 tests passed**, TypeScript
+  and Vite production build passed. Two new backend regressions first reproduced
+  publishing after external campaign rename/stream move, then passed with fresh
+  campaign-prefix and ownership checks before Push. This does not remove the
+  documented race between remote checks and PUT.
+- Kubernetes Deployment, Service, PVC and manual recovery Job were validated
+  against the official Kubernetes v1.34.3 OpenAPI schema, without deployment.
+  A synthetic `kubectl create secret --dry-run=client` check verified exact
+  unquoted key import. A client dry-run for the resources attempted discovery
+  against an unavailable local API, so it was not counted as server validation;
+  the subsequent schema validation was offline. No Kubernetes resources applied.
+- These launch checks used synthetic credentials and made no Keitaro writes.
+  They establish local startup, not the validity of an evaluator's API key or a
+  live Kubernetes installation. Earlier live Keitaro evidence remains scoped to
+  the separate checks recorded above.

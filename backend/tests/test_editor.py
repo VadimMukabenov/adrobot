@@ -242,3 +242,31 @@ def test_fetch_marks_deleted_global_offer_unavailable_without_losing_history(set
     assert c.post("/api/campaigns/7/fetch").status_code == 200
     offer = stream(c)["offers"][1]
     assert offer["removed"] and not offer["available"]
+
+
+def test_push_rechecks_live_campaign_prefix_and_preserves_draft(setup):
+    c, remote, *_ = setup
+    edit(c, "add", 4)
+    before = deepcopy(remote.streams[11])
+    remote.campaigns[7]["name"] = "production_campaign"
+    response = c.post("/api/streams/11/push", json={"expected_revision": stream(c)["revision"]})
+    assert response.status_code == 403
+    assert remote.streams[11] == before
+    assert stream(c)["dirty"]
+    assert stream(c)["status"] == "ready"
+    assert c.post(
+        "/api/streams/11/cancel", json={"expected_revision": stream(c)["revision"]}
+    ).status_code == 200
+
+
+def test_push_rejects_stream_moved_to_another_campaign(setup):
+    c, remote, *_ = setup
+    edit(c, "add", 4)
+    remote.campaigns[8] = dict(remote.campaigns[7], id=8)
+    remote.streams[11]["campaign_id"] = 8
+    before = deepcopy(remote.streams[11])
+    response = c.post("/api/streams/11/push", json={"expected_revision": stream(c)["revision"]})
+    assert response.status_code == 409
+    assert remote.streams[11] == before
+    assert stream(c)["dirty"]
+    assert stream(c)["status"] == "ready"

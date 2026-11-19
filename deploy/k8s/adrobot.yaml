@@ -1,0 +1,113 @@
+# Optional single-instance deployment. Set the image before applying.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: adrobot-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adrobot
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: adrobot
+  template:
+    metadata:
+      labels:
+        app: adrobot
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: adrobot:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8765
+          env:
+            - name: KEITARO_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: adrobot-keitaro
+                  key: KEITARO_BASE_URL
+            - name: KEITARO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: adrobot-keitaro
+                  key: KEITARO_API_KEY
+            - name: CAMPAIGN_PREFIX
+              valueFrom:
+                secretKeyRef:
+                  name: adrobot-keitaro
+                  key: CAMPAIGN_PREFIX
+                  optional: true
+            - name: DATABASE_URL
+              value: sqlite:////data/adrobot.db
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: adrobot-data
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adrobot
+spec:
+  type: ClusterIP
+  selector:
+    app: adrobot
+  ports:
+    - name: http
+      port: 8765
+      targetPort: http

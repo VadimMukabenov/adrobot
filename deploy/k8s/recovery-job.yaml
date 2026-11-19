@@ -1,0 +1,45 @@
+# Run only after every Adrobot worker has stopped. Not applied during startup.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: adrobot-recovery
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: recovery
+          image: adrobot:local
+          imagePullPolicy: IfNotPresent
+          command: [.venv/bin/python, -m, adrobot.recover, --worker-stopped]
+          env:
+            - name: DATABASE_URL
+              value: sqlite:////data/adrobot.db
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: adrobot-data

@@ -1,10 +1,13 @@
 services:
   app:
+    image: adrobot:local
     build: .
     ports:
-      - "127.0.0.1:8765:8765"
+      - "127.0.0.1:${ADROBOT_PORT:-8765}:8765"
     env_file: .env
     environment:
+      KEITARO_BASE_URL: ${KEITARO_BASE_URL:?Set KEITARO_BASE_URL in .env}
+      KEITARO_API_KEY: ${KEITARO_API_KEY:?Set KEITARO_API_KEY in .env}
       DATABASE_URL: sqlite:////data/adrobot.db
     volumes:
       - adrobot-data:/data

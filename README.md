@@ -19,6 +19,9 @@ Open **http://127.0.0.1:8765/**, then connect:
    |---|---|
    | `fortests@etolegko.com` | `T9*2jiT8zoUKEH1J7VvFqkXM` |
 
+   > **Security note:** I understand that real project credentials must never be published or committed.
+   > This shared test account is included deliberately as an assignment-only simplification for quick evaluation and onboarding.
+
 2. In Keitaro: account icon → **Account → API keys**. Copy the existing key.
    [Where to find it](https://docs.keitaro.io/en/team-management/admin-api-keys.html).
 3. Back in Adrobot, keep the prefilled **Keitaro URL**, paste the key into
